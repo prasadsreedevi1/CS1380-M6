@@ -1,0 +1,203 @@
+@startuml M6-Component-Interactions
+
+' Shows detailed interaction flow between all components in search pipeline
+' Traces exact sequence of function calls: CLI to QueryParser to ProcessQuery to SearchService to TfIdf to MetadataBoost to final result
+' Separate flows shown for indexing pipeline with DocumentProcessor, SeedLoader, GitHubAPI
+' Each numbered arrow shows the execution order and data passing between classes
+
+!define BGCOLOR #F5F5F5
+!define ACCENTCOLOR #1F77B4
+!define ACCENTCOLOR2 #FF7F0E
+
+skinparam backgroundColor BGCOLOR
+skinparam classBackgroundColor #E8F4F8
+skinparam classBorderColor ACCENTCOLOR
+skinparam arrowColor #333
+
+title M6 Search Engine - Component Interaction Diagram
+
+class CLI {
+  - query: string
+  - filters: object
+  ---
+  + search(query, options)
+  + displayResults(results)
+}
+
+class QueryParser {
+  ---
+  + parse(rawQuery)
+  + extractFilters(query)
+  + parseLanguageFilter()
+  + parseOwnerFilter()
+}
+
+class QueryProcessor {
+  ---
+  + process(parsedQuery)
+  + normalizeTerms()
+  + generateVariations()
+  + prepareForSearch()
+}
+
+class DocumentProcessor {
+  - text: string
+  ---
+  + process(document)
+  + extractReadmeText()
+  + normalizeText()
+  + tokenize()
+  + stem()
+  + generateNgrams()
+}
+
+class SearchService {
+  - index: Map
+  ---
+  + search(query, options)
+  + scoreDocuments()
+  + filterResults()
+  + rankResults()
+  + limitResults()
+}
+
+class TfIdf {
+  ---
+  + calculateTF(term, document)
+  + calculateIDF(term, corpus)
+  + calculateTfIdf(term, document, corpus)
+}
+
+class MetadataBoost {
+  ---
+  + boostByStars()
+  + boostByLanguage()
+  + boostByTopics()
+  + combinedBoost()
+}
+
+class ScoreCalculator {
+  ---
+  + calculateScore(tfIdf, metadata)
+  + combineScores(weights)
+}
+
+class IndexEntry {
+  - term: string
+  - postings: Array
+  - documentFrequency: number
+  ---
+  + addPosting(docId, frequency)
+  + getPostings()
+}
+
+class RepoDocument {
+  - owner: string
+  - repo: string
+  - language: string
+  - readmeText: string
+  ---
+  + validate()
+  + getMetadata()
+}
+
+class SearchResult {
+  - repoId: string
+  - score: number
+  - highlights: Array
+  ---
+  + filterByLanguage()
+  + filterByOwner()
+  + sortByScore()
+}
+
+class StorageKeys {
+  {static} INVERTED_INDEX_PREFIX
+  {static} TF_INDEX_PREFIX
+  {static} DF_INDEX_PREFIX
+  ---
+  {static} + indexKey(term)
+  {static} + tfKey(term)
+  {static} + dfKey(term)
+}
+
+class SeedLoader {
+  ---
+  + loadSeeds(filepath)
+  + parseRepository()
+  + validateFormat()
+  + expandRepoUrl()
+}
+
+class GitHubAPI {
+  ---
+  + getRepositoryMetadata(owner, repo)
+  + getReadmeContent(owner, repo)
+  + getRepositoryStars()
+  + getTopics()
+}
+
+class ResultFormatter {
+  - format: string
+  ---
+  + format(results)
+  + formatAsCLI()
+  + formatAsJSON()
+  + formatAsCSV()
+}
+
+'' Interactions
+CLI --> QueryParser: "1. Parse user query"
+QueryParser --> QueryProcessor: "2. Send parsed query"
+QueryProcessor --> SearchService: "3. Prepared search terms"
+SearchService --> TfIdf: "4. Calculate TF-IDF scores"
+TfIdf --> MetadataBoost: "5. Apply metadata weights"
+MetadataBoost --> ScoreCalculator: "6. Combine scores"
+ScoreCalculator --> SearchService: "7. Combined scores"
+SearchService --> SearchResult: "8. Create result objects"
+SearchResult --> ResultFormatter: "9. Format results"
+ResultFormatter --> CLI: "10. Display formatted output"
+
+DocumentProcessor --> RepoDocument: "Validate document shape"
+DocumentProcessor --> IndexEntry: "Create index entries"
+DocumentProcessor --> StorageKeys: "Get storage key names"
+
+SeedLoader --> GitHubAPI: "Fetch repository metadata"
+GitHubAPI --> RepoDocument: "Create document objects"
+RepoDocument --> DocumentProcessor: "Process for indexing"
+
+SearchService --> IndexEntry: "Lookup postings"
+IndexEntry --> StorageKeys: "Use index keys"
+
+note right of CLI
+  Entry point for user
+  interactions. Coordinates
+  search workflow.
+end note
+
+note right of QueryParser
+  Parses raw query strings
+  and extracts filters like
+  language and owner.
+end note
+
+note right of DocumentProcessor
+  Pipeline for preparing
+  documents for indexing.
+  Applies full text
+  processing chain.
+end note
+
+note right of SearchService
+  Core search logic:
+  matches queries against
+  index and ranks results.
+end note
+
+note right of ScoreCalculator
+  Combines TF-IDF (75%)
+  with metadata factors
+  (25%) for final ranking.
+end note
+
+@enduml

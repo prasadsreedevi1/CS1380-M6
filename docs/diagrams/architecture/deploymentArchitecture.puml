@@ -1,0 +1,164 @@
+@startuml M6-Deployment-Architecture
+
+' Shows how the distributed search engine is deployed across multiple nodes in a cluster
+' Includes all M1-M5 infrastructure: Serialization, TCP networking, Gossip protocol, sharded KV store, MapReduce
+' Local development setup: 4 nodes running in parallel with consistent hashing to distribute data
+' Search/crawl/index phases run as separate processes that communicate through distributed store
+
+!define BGCOLOR #F5F5F5
+!define ACCENTCOLOR #1F77B4
+!define ACCENTCOLOR2 #FF7F0E
+
+skinparam backgroundColor BGCOLOR
+skinparam componentFontColor #333
+skinparam ArrowColor #666
+
+title M6 Distributed Search Engine - Deployment Architecture
+
+cloud "GitHub.com" {
+  component [GitHub API] as GITHUB
+}
+
+package "Seed Layer" {
+  component [seed repositories\n(github-repos.txt)] as SEEDS
+}
+
+package "Local Development (M1-M5 Runtime)" {
+  
+  package "Network Layer (M2)" {
+    component [TCP Socket\nServer] as SOCKET
+    component [RPC Server] as RPC
+  }
+  
+  package "Gossip Protocol (M3)" {
+    component [Member Discovery] as DISCOVER
+    component [Message Broadcast] as BROADCAST
+    component [Failure Detection] as FAILDETECT
+  }
+  
+  package "Serialization (M1)" {
+    component [Message\nSerialization] as SERIAL
+  }
+  
+  package "Distributed Store (M4)" {
+    component [Key-Value Store\nNode 1] as KV1
+    component [Key-Value Store\nNode 2] as KV2
+    component [Key-Value Store\nNode 3] as KV3
+    component [Consistent\nHashing] as HASH
+  }
+  
+  package "MapReduce Engine (M5)" {
+    component [Job Coordinator] as COORD
+    component [Map Workers] as MAPW
+    component [Reduce Workers] as REDW
+    component [Task Scheduler] as SCHED
+  }
+}
+
+package "Search Engine Processes" {
+  
+  package "Crawl Process" {
+    component [Seed Loader] as SL
+    component [Repository Parser] as RP
+    component [GitHub Fetcher] as GF
+  }
+  
+  package "Index Process" {
+    component [Document\nProcessor] as DOCPROC
+    component [Index Builder] as INDEXBUILD
+    component [Term Frequency\nCalculator] as TFC
+  }
+  
+  package "Search Process" {
+    component [Query Parser] as QP
+    component [Searcher] as SEARCHER
+    component [Ranking Engine] as RANKER
+  }
+  
+  package "CLI Layer" {
+    component [search-cli] as SEARCHCLI
+    component [Result\nFormatter] as FORMATTER
+  }
+}
+
+'' External Communication
+SEEDS --> SL: Repository list
+SL --> RP: Parse seeds
+RP --> GF: Fetch metadata
+GF --> GITHUB: API calls
+
+'' M4 Store Architecture
+HASH --> KV1: Routes requests
+HASH --> KV2: Routes requests
+HASH --> KV3: Routes requests
+
+KV1 -.-> KV2: Replication
+KV2 -.-> KV3: Replication
+
+'' M2/M3 Network
+SOCKET --> SERIAL: Network messages
+RPC --> SERIAL: RPC calls
+DISCOVER --> BROADCAST: Gossip
+FAILDETECT --> BROADCAST: Health updates
+
+'' Crawl Phase
+GF --> DOCPROC: Repository documents
+DOCPROC --> HASH: Store documents
+COORD --> MAPW: Distribute crawl tasks
+
+'' Index Phase
+DOCPROC --> INDEXBUILD: Processed documents
+INDEXBUILD --> TFC: Build term frequencies
+TFC --> HASH: Store inverted index
+INDEXBUILD --> HASH: Store TF/DF data
+COORD --> MAPW: Distribute index tasks
+
+'' Search Phase
+SEARCHCLI --> QP: User query
+QP --> SEARCHER: Parsed query
+SEARCHER --> HASH: Lookup index
+SEARCHER --> RANKER: Candidate documents
+RANKER --> FORMATTER: Ranked results
+FORMATTER --> SEARCHCLI: Formatted output
+
+'' Communication
+DOCPROC -.-> SERIAL: Serialize documents
+SEARCHER -.-> SERIAL: Serialize requests
+HASH -.-> SERIAL: Message format
+
+note right of HASH
+  Consistent hashing
+  distributes index
+  across K V3 nodes
+end note
+
+note right of COORD
+  For large datasets,
+  crawl and index phases
+  can be parallelized
+  via MapReduce
+end note
+
+note right of SOCKET
+  M2 TCP socket server
+  enables remote
+  communication
+end note
+
+note right of DISCOVER
+  M3 gossip protocol
+  maintains cluster
+  membership info
+end note
+
+package "Storage" {
+  database [Local Cache\n(.cache/)] as CACHE
+  database [Results\n(benchmarks/results/)] as RESULTS
+  database [Sample Data\n(data/)] as DATA
+}
+
+HASH --> CACHE: Persistent backup
+FORMATTER --> RESULTS: Benchmark results
+SEEDS --> DATA: Fixture data
+
+@enduml
