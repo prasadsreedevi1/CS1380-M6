@@ -1,17 +1,31 @@
 #!/usr/bin/env node
 
-/**
- * index command - builds searchable index from crawled README files
- */
+// builds searchable index from crawled readme files
+// index command runs mapreduce jobs to build inverted index
 
-const { parseIndexArgs, printJson, printError } = require('./cliHelpers.js');
-const { runIndex } = require('../pipelines/indexPipeline.js');
+const {parseIndexArgs, printJson, printTable, formatIndexStats, printError} = require('./cliHelpers.js');
+const {runIndex} = require('../pipelines/indexPipeline.js');
 
 async function main() {
   try {
     const options = parseIndexArgs(process.argv.slice(2));
-    const summary = await runIndex(options);
-    printJson(summary);
+    const runtime = global.runtime || require('../runtime/distribution.js');
+
+    runIndex(options, runtime, (err, summary) => {
+      if (err) {
+        printError(err);
+        process.exit(1);
+      }
+
+      if (options.json) {
+        printJson(summary);
+      } else {
+        const formatted = formatIndexStats(summary);
+        printTable(formatted);
+      }
+
+      process.exit(0);
+    });
   } catch (error) {
     printError(error);
     process.exit(1);
