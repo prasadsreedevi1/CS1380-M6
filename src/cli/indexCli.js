@@ -9,7 +9,7 @@ const {runIndex} = require('../pipelines/indexPipeline.js');
 async function main() {
   try {
     const options = parseIndexArgs(process.argv.slice(2));
-    const runtime = global.runtime || require('../runtime/distribution.js');
+    const runtime = global.runtime || require('../../distribution.js')();
 
     runIndex(options, runtime, (err, summary) => {
       if (err) {

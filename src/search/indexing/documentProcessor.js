@@ -2,8 +2,8 @@
 // takes markdown, extracts text, normalizes, tokenizes, stems, and generates ngrams
 // returns tokens and term frequencies for each document
 
-const {extractReadmeText} = require('../parsing/extarct-readme-text.js');
-const {normalizeText} = require('../parsing/normalize-text.js');
+const {extractReadmeText} = require('../parsing/extractReadmeText.js');
+const {normalizeText} = require('../parsing/normalizeText.js');
 const {tokenize} = require('../parsing/tokenize.js');
 const {stemTokens} = require('../parsing/stem.js');
 const {generateAllNGrams} = require('../parsing/ngrams.js');

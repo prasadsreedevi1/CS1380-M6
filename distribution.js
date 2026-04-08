@@ -27,6 +27,18 @@ function bootstrap(config) {
   const {setup} = require('./src/runtime/all/all.js');
   distribution.all = setup({gid: 'all'});
 
+  const inMemoryStore = {};
+  distribution.store = {
+    get: (key, callback) => {
+      const value = inMemoryStore[key];
+      callback(null, value);
+    },
+    put: (key, value, callback) => {
+      inMemoryStore[key] = value;
+      if (callback) callback(null);
+    }
+  };
+
   const nodeGroup = {};
   if (distribution.node && distribution.node.config) {
     const sid = distribution.util.id.getSID(distribution.node.config);

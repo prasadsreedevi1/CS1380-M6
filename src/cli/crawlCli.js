@@ -15,7 +15,7 @@ async function main() {
       process.exit(1);
     }
 
-    const runtime = global.runtime || require('../runtime/distribution.js');
+    const runtime = global.runtime || require('../../distribution.js')();
 
     runCrawl(options, runtime, (err, summary) => {
       if (err) {
