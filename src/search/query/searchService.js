@@ -2,9 +2,9 @@
 // takes a query, processes it, looks up matching docs in the index, ranks them
 // combines query processing, index lookup, and scoring into one place
 
-const {processQuery, getAllQueryVariations} = require('./query-processor.js');
+const {processQuery, getAllQueryVariations} = require('./queryProcessor.js');
 const score = require('../ranking/score.js');
-const {createSearchResult, sortByRelevance, filterByLanguage, filterByOwner} = require('../models/search-result.js');
+const {createSearchResult, sortByRelevance, filterByLanguage, filterByOwner} = require('../models/searchResult.js');
 
 function search(queryString, searchContext, callback) {
   if (!queryString || typeof callback !== 'function') {
@@ -66,7 +66,7 @@ function executeSearchSync(processedQuery, context = {}) {
       item.doc,
       item.score,
       processedQuery.terms,
-  ));
+  )).filter(r => r !== null);
 
   if (processedQuery.language) {
     results = filterByLanguage(results, processedQuery.language);

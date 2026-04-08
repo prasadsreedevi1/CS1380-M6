@@ -13,10 +13,11 @@ const yargs = require('yargs/yargs');
  * @returns {Node}
  */
 function setNodeConfig() {
-  const args = yargs(process.argv)
+  const args = yargs(process.argv.slice(2))
+      .strict(false)
       .help(false)
       .version(false)
-      .parse();
+      .argv;
 
   let maybeIp; let maybePort; let maybeOnStart;
   if (typeof args.ip === 'string') {

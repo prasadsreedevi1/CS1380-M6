@@ -2,7 +2,7 @@
 // extracts filter terms like lang: and owner:
 // normalizes and stems the remaining text
 
-const {normalizeText} = require('../parsing/normalize-text.js');
+const {normalizeText} = require('../parsing/normalizeText.js');
 const {tokenize} = require('../parsing/tokenize.js');
 const {stemTokens} = require('../parsing/stem.js');
 

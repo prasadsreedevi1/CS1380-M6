@@ -3,7 +3,7 @@
 // mixes tfidf (75%) with metadata boost (25%)
 
 const tfidf = require('./tfidf.js');
-const metadataBoost = require('./metadata-boost.js');
+const metadataBoost = require('./metadataBoost.js');
 
 function scoreDocument(doc, termFrequencies, queryTerms, totalDocs, documentFrequencies) {
   const tfidfScore = tfidf.calculateDocumentTFIDF(

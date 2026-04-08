@@ -3,10 +3,13 @@
 // results are sorted by score so best matches show up first
 
 function createSearchResult(doc, score, matchedTerms = []) {
+  if (!doc) {
+    return null;
+  }
   return {
-    owner: doc.owner,
-    repo: doc.repo,
-    url: doc.url,
+    owner: doc.owner || 'unknown',
+    repo: doc.repo || 'unknown',
+    url: doc.url || '',
     description: doc.description || '',
     language: doc.language || null,
     stars: doc.stars || 0,

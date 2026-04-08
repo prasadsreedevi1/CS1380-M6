@@ -19,60 +19,76 @@ function executeSearch(queryString, options, runtime, callback) {
   options = options || {};
   const store = runtime.store;
   const limit = options.limit || 10;
-  const offset = options.offset || 0;
-  const explainScores = options.explain || false;
 
-  // parse query with filters
-  const parsed = queryParser.parseQuery(queryString);
+  // Parse query string
+  const queryTerm = queryString.toLowerCase().trim();
 
-  // get index statistics
+  // Get index statistics
   getIndexStats(store, (err, indexStats) => {
-    if (err) 
-        return callback(err);
-
-    if (!indexStats || indexStats.docsIndexed === 0) {
+    if (err || !indexStats || indexStats.docsIndexed === 0) {
       return callback(null, {
         query: queryString,
         results: [],
         total: 0,
-        explainedResults: [],
       });
     }
 
-    // search for documents matching terms
-    searchForMatches(store, parsed.terms, indexStats, (err, docMatches) => {
-      if (err) 
-        return callback(err);
-
-      // apply filters if any
-      let filtered = docMatches;
-      if (parsed.filters.language) {
-        filtered = filterByLanguage(filtered, parsed.filters.language);
-      }
-      if (parsed.filters.owner) {
-        filtered = filterByOwner(filtered, parsed.filters.owner);
-      }
-
-      // score and rank results
-      scoreResults(store, filtered, parsed.terms, indexStats, explainScores, (err, scored) => {
-        if (err) return callback(err);
-
-        scored.sort((a, b) => b.score - a.score);
-
-        // pagination
-        const paginatedResults = scored.slice(offset, offset + limit);
-
-        const result = {
+    // Get postings for query term
+    const indexKey = storageKeys.invertedIndexKey(queryTerm);
+    store.get(indexKey, (err, entry) => {
+      if (err || !entry || !entry.postings) {
+        // Term not found, return empty results
+        return callback(null, {
           query: queryString,
-          filters: parsed.filters,
-          results: paginatedResults,
-          total: scored.length,
-          limit,
-          offset,
-        };
+          results: [],
+          total: 0,
+        });
+      }
 
-        callback(null, result);
+      // Get matching documents
+      const docIds = Object.keys(entry.postings);
+      const results = [];
+      let completed = 0;
+
+      docIds.slice(0, limit).forEach(docId => {
+        const [owner, repo] = docId.split('/');
+        const metaKey = storageKeys.documentMetadataKey(owner, repo);
+
+        store.get(metaKey, (err, metadata) => {
+          if (!err && metadata) {
+            results.push({
+              owner: metadata.owner || owner,
+              repo: metadata.repo || repo,
+              url: metadata.url || `https://github.com/${owner}/${repo}`,
+              description: metadata.description || '',
+              language: metadata.language || null,
+              stars: metadata.stars || 0,
+              score: (entry.postings[docId] || 0) * 10, // Simple scoring based on frequency
+              matchedTerms: [queryTerm]
+            });
+          }
+          completed++;
+
+          if (completed === Math.min(limit, docIds.length)) {
+            // Sort by score
+            results.sort((a, b) => b.score - a.score);
+            callback(null, {
+              query: queryString,
+              results,
+              total: docIds.length,
+            });
+          }
+        });
       });
+
+      // Handle empty results case
+      if (docIds.length === 0) {
+        callback(null, {
+          query: queryString,
+          results: [],
+          total: 0,
+        });
+      }
     });
   });
 }

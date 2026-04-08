@@ -2,8 +2,8 @@
 // normalizes, tokenizes, stems, generates ngrams
 // ensures query and index use same vocabulary
 
-const {parseQuery} = require('./query-parser.js');
-const {normalizeText} = require('../parsing/normalize-text.js');
+const {parseQuery} = require('./queryParser.js');
+const {normalizeText} = require('../parsing/normalizeText.js');
 const {tokenize} = require('../parsing/tokenize.js');
 const {stemTokens} = require('../parsing/stem.js');
 const {generateAllNGrams} = require('../parsing/ngrams.js');

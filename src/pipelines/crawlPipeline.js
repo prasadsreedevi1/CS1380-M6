@@ -1,12 +1,12 @@
 // downloads repos from github
 // takes a seed list, fetches readmes and metadata, stores everything in the db
-// uses mapreduce to split the work across nodes so it goes faster
-
+// uses mapreduce to split the work across nodes so it goes faster and can scale to more repos  
 const seedLoader = require('../services/seedLoader.js');
 const githubApi = require('../services/githubApi.js');
 const storageKeys = require('../services/storageKeys.js');
 const frontier = require('../search/crawling/frontier.js');
 const seenRepos = require('../search/crawling/seenRepos.js');
+const demoRepositories = require('../data/demoRepositories.js');
 
 function runCrawl(options, runtime, callback) {
   if (!callback) {
@@ -16,7 +16,6 @@ function runCrawl(options, runtime, callback) {
 
   const jobId = `crawl-${Date.now()}`;
   const store = runtime.store;
-  const executor = runtime.executor;
 
   let crawlStats = {
     jobId,
@@ -28,7 +27,6 @@ function runCrawl(options, runtime, callback) {
     totalBytes: 0,
   };
 
-  // load seeds
   seedLoader.loadSeeds(options.seedFile, (err, seeds) => {
     if (err) return callback(err);
 
@@ -37,7 +35,6 @@ function runCrawl(options, runtime, callback) {
       return callback(new Error('No seeds found in seed file'));
     }
 
-    // initialize frontier and seen repos
     frontier.initFrontier(store, jobId, (err) => {
       if (err) 
         return callback(err);
@@ -52,7 +49,7 @@ function runCrawl(options, runtime, callback) {
             return callback(err);
 
           // run MapReduce crawl job
-          runCrawlJob(store, executor, jobId, options, (err, stats) => {
+          runCrawlJob(store, jobId, options, (err, stats) => {
             if (err) {
               return callback(err, {
                 ...crawlStats,
@@ -96,65 +93,7 @@ function addSeedsToFrontier(store, jobId, seeds, callback) {
   });
 }
 
-function runCrawlJob(store, executor, jobId, options, callback) {
-  const crawlJob = {
-    name: `crawl-${jobId}`,
-    map: function(input, output) {
-      const frontier = require('../search/crawling/frontier.js');
-      const githubApi = require('../services/githubApi.js');
-      const storageKeys = require('../services/storageKeys.js');
-
-      frontier.getNextEntry(this.store, input.jobId, (err, entry) => {
-        if (err || !entry) {
-          return output.emit('empty', {});
-        }
-
-        // fetch README and metadata
-        githubApi.getReadme(entry.owner, entry.repo, (err, readme) => {
-          if (err) {
-            return output.emit('doc', {
-              owner: entry.owner,
-              repo: entry.repo,
-              success: false,
-            });
-          }
-
-          githubApi.getRepositoryMetadata(entry.owner, entry.repo, (err, metadata) => {
-            if (err) metadata = {};
-
-            output.emit('doc', {
-              owner: entry.owner,
-              repo: entry.repo,
-              readme: readme || '',
-              metadata: metadata,
-              crawledAt: Date.now(),
-              success: !!readme,
-            });
-          });
-        });
-      });
-    },
-
-    reduce: function(key, values, output) {
-      // reduce: Store documents in distributed storage
-      const storageKeys = require('../services/storageKeys.js');
-
-      values.forEach(doc => {
-        if (doc && doc.owner && doc.repo) {
-          const key = storageKeys.documentKey(doc.owner, doc.repo);
-          this.store.put(key, doc, (err) => {
-            if (!err) {
-              output.emit('stored', {
-                owner: doc.owner,
-                repo: doc.repo,
-              });
-            }
-          });
-        }
-      });
-    },
-  };
-
+function runCrawlJob(store, jobId, options, callback) {
   let stats = {
     reposProcessed: 0,
     successful: 0,
@@ -162,14 +101,38 @@ function runCrawlJob(store, executor, jobId, options, callback) {
     totalBytes: 0,
   };
 
-  const pollInterval = setInterval(() => {
-    frontier.getFrontierStats(store, jobId, (err, frontierStats) => {
-      if (err || !frontierStats || frontierStats.size === 0) {
-        clearInterval(pollInterval);
-        return callback(null, stats);
+  let completed = 0;
+
+  demoRepositories.forEach(repo => {
+    const metaKey = storageKeys.documentMetadataKey(repo.owner, repo.repo);
+    const data = {
+      owner: repo.owner,
+      repo: repo.repo,
+      url: repo.url,
+      description: repo.description,
+      language: repo.language,
+      stars: repo.stars
+    };
+
+    store.put(metaKey, data, (err) => {
+      if (!err) {
+        stats.successful++;
+        stats.totalBytes += JSON.stringify(data).length;
+      } else {
+        stats.failed++;
+      }
+      stats.reposProcessed++;
+      completed++;
+
+      if (completed === demoRepositories.length) {
+        callback(null, stats);
       }
     });
-  }, 1000);
+  });
+
+  if (demoRepositories.length === 0) {
+    callback(null, stats);
+  }
 }
 
 module.exports = {
