@@ -1,0 +1,96 @@
+@startuml M6-System-Context
+
+' System Context: M6 Search Engine in its environment
+' Shows external systems: GitHub API, users, storage infrastructure
+' External actors: End Users, Administrators, GitHub, KV Store (M4)
+' Demonstrates overall system boundaries and interactions
+
+!define BGCOLOR #F5F5F5
+skinparam backgroundColor BGCOLOR
+skinparam actorBorderColor #333
+skinparam actorBackgroundColor #E8F4F8
+skinparam componentBorderColor #333
+skinparam componentBackgroundColor #FFFFFF
+skinparam arrowColor #333
+skinparam shadowing false
+
+title M6 Search Engine - System Context
+
+actor "End Users" as USERS
+actor "Administrators" as ADMINS
+actor "Developers" as DEVS
+actor "GitHub API" as GITHUB
+actor "Storage\n(M4 KV Store)" as STORAGE
+actor "Distributed\nCluster\n(M1-M5)" as CLUSTER
+
+component [M6 Search Engine] as M6
+
+'' External inputs
+USERS --> M6: Search queries\n(keywords, filters)
+ADMINS --> M6: Start operations\n(crawl, index, monitor)
+DEVS --> M6: Review architecture\nand code
+
+'' External outputs
+M6 --> USERS: Search results\n(ranked by relevance)
+M6 --> ADMINS: Progress reports\nHealth metrics
+M6 --> DEVS: Logs, metrics\nfor analysis
+
+'' Data sources
+GITHUB --> M6: Repository data\n(metadata, README)
+M6 --> GITHUB: API requests\n(~100 repos)
+
+'' Storage integration
+M6 --> STORAGE: Store/retrieve\nindex data
+STORAGE --> M6: TF statistics\nDF statistics\nMetadata
+
+'' Distributed infrastructure
+M6 --> CLUSTER: Use M1-M5\nservices
+CLUSTER --> M6: Serialization,\nCommunication,\nGossip, MapReduce
+
+note right of USERS
+  Typical queries:
+  "python async"
+  "javascript framework"
+  Get top 10 ranked results
+  <30ms latency
+end note
+
+note right of ADMINS
+  Operations:
+  Start crawl (GitHub API)
+  Start index (text processing)
+  Monitor system health
+  Check node status
+end note
+
+note right of M6
+  3 Phases:
+  CRAWL: GitHub API → docs
+  INDEX: text processing
+  SEARCH: TF-IDF ranking
+  
+  Supports 100+ repos
+  10,000+ terms
+  Distributed on 4 nodes
+end note
+
+note right of STORAGE
+  Stores:
+  - Inverted index
+  - TF statistics
+  - DF statistics
+  - Document metadata
+  
+  Accessed via M4
+  (key-value store)
+end note
+
+note right of CLUSTER
+  M1: Serialization (convert objects)
+  M2: Communication (network)
+  M3: Gossip (sync nodes)
+  M4: KV Store (persistence)
+  M5: MapReduce (parallel jobs)
+end note
+
+@enduml

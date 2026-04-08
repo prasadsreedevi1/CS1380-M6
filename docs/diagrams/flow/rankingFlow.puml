@@ -1,0 +1,157 @@
+@startuml M6-TFIdf-Ranking-Flow
+
+' How documents get ranked when you search
+' Step 1: Calculate TF (how often term appears in document)
+' Step 2: Calculate IDF (how rare the term is across all documents)
+' Step 3: TF-IDF = TF * IDF (relevance to your query)
+' Step 4: Add metadata boosts (popular repos, matching language, matching topics)
+' Step 5: Final score = 0.75*TF-IDF + 0.25*metadata, then rank and show top 10
+
+!define BGCOLOR #F5F5F5
+
+skinparam backgroundColor BGCOLOR
+skinparam componentFontColor #333333
+skinparam ArrowColor #333333
+skinparam packageBorderColor #666666
+skinparam packageBackgroundColor #FFFFFF
+skinparam rectangleBorderColor #666666
+skinparam rectangleBackgroundColor #FFFFFF
+skinparam databaseBorderColor #666666
+skinparam databaseBackgroundColor #FFFFFF
+skinparam noteBackgroundColor #FFF8DC
+skinparam noteBorderColor #999999
+skinparam shadowing false
+
+title M6 Search Engine - TF-IDF Ranking & Scoring Flow
+
+rectangle "Candidate Documents\nFrom Inverted Index" as CANDIDATES
+rectangle "Term Coverage\nWhich query terms\nappear in document?" as COVERAGE
+
+package "Calculate TF\n(Term Frequency)" as TF_CALC {
+  component [Raw Count\ncount(term, doc)] as TF_RAW
+  component [Normalize\ncount / doc_length] as TF_NORM
+}
+
+package "Calculate IDF\n(Inverse Document Frequency)" as IDF_CALC {
+  component [Document Freq\ncount(docs with term)] as DF_LOOKUP
+  component [Calculate IDF\nlog(N / DF)] as IDF_COMP
+}
+
+rectangle "TF-IDF Score\nTF × IDF" as TFIDF_SCORE
+
+package "Metadata Boost Factors" as METADATA {
+  component [Language Match\nx1.1 if match] as LANG_BOOST
+  component [Star Rating\nx(1 + stars/1000)] as STAR_BOOST
+  component [Topic Match\nx1.05 per topic] as TOPIC_BOOST
+}
+
+package "Combined Score" as COMBINED {
+  component [TF-IDF Weight\n0.75 factor] as WGT_TFIDF
+  component [Metadata Weight\n0.25 factor] as WGT_META
+  component [Final Score\n(0.75 x tfidf) +\n(0.25 x boost)] as FINAL
+}
+
+rectangle "Document Ranking\nSort by score\nDescending" as RANKING
+rectangle "Apply Filters\nLanguage, Owner\nTopics" as FILTERS
+rectangle "Limit Results\nTop K results" as LIMIT
+rectangle "Return Results\nto User" as RETURN
+
+database "Index Postings\n{term: [(docId, tf), ...]}" as INDEX_DATA
+database "TF Statistics\n{term: {doc: freq}}" as TF_STORE
+database "DF Statistics\n{term: doc_count}" as DF_STORE
+database "Document Metadata\n{docId: {stars, lang, topics}}" as META_STORE
+
+CANDIDATES --> COVERAGE
+COVERAGE --> TF_CALC
+COVERAGE --> IDF_CALC
+
+TF_CALC --> TF_RAW
+TF_CALC --> TF_NORM
+TF_RAW --> TF_NORM
+TF_NORM --> TFIDF_SCORE
+
+IDF_CALC --> DF_LOOKUP
+IDF_CALC --> IDF_COMP
+DF_LOOKUP --> IDF_COMP
+IDF_COMP --> TFIDF_SCORE
+
+TFIDF_SCORE --> COMBINED
+
+CANDIDATES --> METADATA
+LANG_BOOST --> COMBINED
+STAR_BOOST --> COMBINED
+TOPIC_BOOST --> COMBINED
+
+COMBINED --> WGT_TFIDF
+COMBINED --> WGT_META
+WGT_TFIDF --> FINAL
+WGT_META --> FINAL
+
+FINAL --> RANKING
+RANKING --> FILTERS
+FILTERS --> LIMIT
+LIMIT --> RETURN
+
+INDEX_DATA -.-> COVERAGE : Query postings
+TF_STORE -.-> TF_RAW : TF values
+TF_STORE -.-> TF_NORM : Doc length
+DF_STORE -.-> DF_LOOKUP : DF lookup
+META_STORE -.-> METADATA : Metadata
+
+note right of TF_NORM
+  Example:
+  term "javascript"
+  appears 5 times
+  doc has 100 terms
+  TF = 5/100 = 0.05
+end note
+
+note right of IDF_COMP
+  Example:
+  term "javascript"
+  appears in 50 docs
+  total docs = 1000
+  IDF = log(1000/50) = 1.301
+end note
+
+note right of TFIDF_SCORE
+  Example:
+  TF-IDF = 0.05 x 1.301
+          = 0.0651
+end note
+
+note right of LANG_BOOST
+  Example:
+  Query in Python
+  Document in Python
+  Boost = 1.1
+end note
+
+note right of FINAL
+  Example:
+  Score = (0.75 x 0.0651)
+        + (0.25 x 1.1)
+        = 0.0488 + 0.275
+        = 0.3238
+end note
+
+note right of RANKING
+  Higher scores = more
+  relevant results
+  Descending order
+end note
+
+note right of FILTERS
+  After ranking:
+  - Filter by language
+  - Filter by owner
+  - Filter by topics
+end note
+
+note right of LIMIT
+  Return only:
+  Top K results
+  (usually K = 10)
+end note
+
+@enduml
