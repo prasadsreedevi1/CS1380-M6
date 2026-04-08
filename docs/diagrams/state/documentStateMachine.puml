@@ -1,0 +1,136 @@
+@startuml M6-Document-State-Machine
+
+' Document lifecycle state machine: complete journey from discovery to search results
+' Phase 1 (SEED->CRAWL): Download from GitHub API with retry logic on failures
+' Phase 2 (INDEX): Text processing pipeline (tokenize, normalize, stem, n-grams)
+' Phase 3 (STATS): Calculate term frequencies (TF) and inverse document frequencies (IDF)
+' Phase 4 (PAGERANK): Iterative PageRank computation for document importance ranking
+' Phase 5 (QUERYABLE): Document ready for user searches; calculate scores when matched
+' Final: TF-IDF + metadata boosts combined (75% relevance + 25% popularity)
+
+!define BGCOLOR #F5F5F5
+skinparam backgroundColor BGCOLOR
+skinparam stateBorderColor #333
+skinparam stateBackgroundColor #FFFFFF
+skinparam arrowColor #333
+skinparam startBorderColor #333
+skinparam endBorderColor #333
+skinparam endBackgroundColor #FF9999
+skinparam shadowing false
+
+title M6 Document State Machine - Lifecycle
+
+[*] --> SEED : Repository in\nseed file
+
+SEED --> QUEUED_CRAWL : Add to frontier
+note on link
+  Frontier manager
+  initializes entry
+end note
+
+QUEUED_CRAWL --> CRAWLING : Worker picks\nfrom frontier
+CRAWLING --> CRAWL_SUCCESS : README\ndownloaded\nsuccessfully
+note on link
+  GitHub API fetch
+  stores to KV store
+end note
+
+CRAWLING --> CRAWL_FAILED : Network error\nor not found
+CRAWL_FAILED --> QUEUED_CRAWL : Retry with\nbackoff
+note on link
+  Max retries=3
+  Exponential backoff
+end note
+
+CRAWL_FAILED --> CRAWL_SKIPPED : Max retries\nexceeded
+CRAWL_SKIPPED --> [*]
+
+CRAWL_SUCCESS --> CRAWL_DEDUP : Check seen\nrepos tracker
+CRAWL_DEDUP --> CRAWL_CACHED : Already\nindexed\nbefore
+note on link
+  Avoid re-indexing
+  same content
+end note
+
+CRAWL_CACHED --> [*]
+
+CRAWL_DEDUP --> CRAWL_STORED : Mark as seen\nStore content
+CRAWL_STORED --> INDEXED_PENDING : Ready for\nindexing
+
+INDEXED_PENDING --> INDEXING : MapReduce\nterm extraction\njob runs
+
+INDEXING --> TOKENIZING : Tokenize\ntext
+TOKENIZING --> NORMALIZING : Lowercase\nremove special chars
+NORMALIZING --> STEMMING : Porter\nStemmer
+STEMMING --> NGRAM_BUILDING : Generate\nn-grams
+
+NGRAM_BUILDING --> TERM_COUNTING : Count term\nfrequencies
+TERM_COUNTING --> INDEX_UPDATED : Inverted index\nupdated
+note on link
+  term->[docs]
+  posting lists
+end note
+
+INDEX_UPDATED --> STATS_UPDATED : TF/DF\nstatistics\nupdated
+STATS_UPDATED --> PAGERANK_ITER : PageRank\niterative job\nruns (doc as node)
+
+PAGERANK_ITER --> PAGERANK_CONVERGENCE : Converge after\nN iterations
+PAGERANK_CONVERGENCE --> FULLY_INDEXED : Document fully\nindexed
+
+FULLY_INDEXED --> QUERYABLE : Ready for\nuser queries
+
+QUERYABLE --> QUERY_HIT : User query\nmatches\nthis doc
+note on link
+  Term lookup
+  in inverted index
+end note
+
+QUERYABLE --> QUERY_MISS : User query\ndoesn't\nmatch
+QUERY_MISS --> QUERYABLE : Wait next\nquery
+
+QUERY_HIT --> SCORING : Calculate\nTF-IDF score
+SCORING --> METADATA_BOOST : Apply metadata\nboost\n(stars, lang, topics)
+METADATA_BOOST --> FINAL_SCORE : Combine scores\n0.75*TFIDF +\n0.25*boost
+FINAL_SCORE --> RANKING : Rank among\nresults
+
+RANKING --> TOP_K : In top 10\nresults?
+TOP_K --> DISPLAYED : Show to\nuser
+DISPLAYED --> QUERYABLE : Searchable\nagain
+
+RANKING --> NOT_SHOWN : Below\nthreshold
+NOT_SHOWN --> QUERYABLE : Searchable\nstill available
+
+note right of SEED
+  Repository identified
+  from seed file
+end note
+
+note right of CRAWLING
+  Download from GitHub
+  fetch README + metadata
+end note
+
+note right of INDEXING
+  Term extraction &
+  statistics phase
+  (MapReduce Job 1-2)
+end note
+
+note right of PAGERANK_ITER
+  PageRank computation
+  (MapReduce Job 3)
+  iterative convergence
+end note
+
+note right of QUERYABLE
+  Document ready for searches
+  All indexing complete
+  Scores cached
+end note
+
+note right of FINAL_SCORE
+  Score = 75% information retrieval
+        + 25% popularity/metadata
+end note
+
+@enduml

@@ -1,0 +1,124 @@
+@startuml M6-Module-Dependencies
+
+' Simplified module dependencies showing the main data flow
+' Top layer: User interacts with CLI
+' Middle layers: 3 main pipelines (Crawl -> Index -> Search)
+' Control layer: Coordinates all operations
+' Storage: M4 distributed key-value store with M1-M5 support
+
+!define BGCOLOR #F5F5F5
+!define ACCENTCOLOR #1F77B4
+
+skinparam backgroundColor BGCOLOR
+skinparam packageFontColor #333
+skinparam componentBackgroundColor #E8F4F8
+skinparam componentBorderColor ACCENTCOLOR
+skinparam arrowColor #333
+
+title M6 Search Engine - Module Dependencies (Simplified)
+
+actor User
+
+package "CLI" {
+  component [search-cli]
+}
+
+package "Control" {
+  component [bootstrap\n& pipelines]
+}
+
+package "CRAWL Phase" {
+  component [fetch from\nGitHub API]
+  component [create\ndocuments]
+}
+
+package "INDEX Phase" {
+  component [text\nprocessing\n(extract, normalize,\ntokenize, stem, ngrams)]
+  component [build\ninverted index]
+  component [calculate\nTF/DF stats]
+}
+
+package "SEARCH Phase" {
+  component [parse &\nprocess query]
+  component [TF-IDF\nranking]
+  component [metadata\nboosts]
+  component [score &\nformat results]
+}
+
+package "Storage (M4-KV)" {
+  component [index data]
+  component [TF stats]
+  component [DF stats]
+  component [document\nmetadata]
+}
+
+package "Distributed Runtime" {
+  component [M1: Serialization]
+  component [M2: Communication]
+  component [M3: Gossip\n(node sync)]
+  component [M5: MapReduce\n(optional)]
+}
+
+'' Main Flow
+User --> [search-cli]
+[search-cli] --> [bootstrap\n& pipelines]
+
+[bootstrap\n& pipelines] --> [fetch from\nGitHub API]
+[fetch from\nGitHub API] --> [create\ndocuments]
+[create\ndocuments] --> [text\nprocessing\n(extract, normalize,\ntokenize, stem, ngrams)]
+
+[text\nprocessing\n(extract, normalize,\ntokenize, stem, ngrams)] --> [build\ninverted index]
+[build\ninverted index] --> [calculate\nTF/DF stats]
+
+[calculate\nTF/DF stats] --> [parse &\nprocess query]
+[parse &\nprocess query] --> [TF-IDF\nranking]
+[TF-IDF\nranking] --> [metadata\nboosts]
+[metadata\nboosts] --> [score &\nformat results]
+
+[score &\nformat results] --> [search-cli]
+[search-cli] --> User
+
+'' Storage connections
+[create\ndocuments] --> [index data]: store
+[build\ninverted index] --> [index data]: store
+[calculate\nTF/DF stats] --> [TF stats]: store
+[calculate\nTF/DF stats] --> [DF stats]: store
+[fetch from\nGitHub API] --> [document\nmetadata]: store
+
+[TF-IDF\nranking] -.-> [TF stats]: lookup
+[TF-IDF\nranking] -.-> [DF stats]: lookup
+[metadata\nboosts] -.-> [document\nmetadata]: lookup
+
+'' Runtime support
+[index data] --> [M1: Serialization]
+[TF stats] --> [M1: Serialization]
+[DF stats] --> [M1: Serialization]
+
+[M1: Serialization] --> [M2: Communication]
+[M2: Communication] --> [M3: Gossip\n(node sync)]
+
+[M5: MapReduce\n(optional)] -.-> [fetch from\nGitHub API]: parallel
+[M5: MapReduce\n(optional)] -.-> [text\nprocessing\n(extract, normalize,\ntokenize, stem, ngrams)]: parallel
+
+note bottom of [bootstrap\n& pipelines]
+  Orchestrates 3 phases
+end note
+
+note bottom of [text\nprocessing\n(extract, normalize,\ntokenize, stem, ngrams)]
+  Standardizes all text:
+  extract -> normalize ->
+  tokenize -> stem -> ngrams
+end note
+
+note bottom of [TF-IDF\nranking]
+  Core ranking algorithm
+  combines frequency &
+  inverse document freq
+end note
+
+note bottom of [M3: Gossip\n(node sync)]
+  Keeps all nodes in sync
+  for distributed search
+end note
+
+@enduml
