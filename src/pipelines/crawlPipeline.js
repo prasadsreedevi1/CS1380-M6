@@ -1,11 +1,9 @@
 // downloads repos from github
 // takes a seed list, fetches readmes and metadata, stores everything in the db
-// uses mapreduce to split the work across nodes so it goes faster and can scale to more repos  
+// uses mapreduce to split the work across nodes so it goes faster and can scale to more repos
 const seedLoader = require('../services/seedLoader.js');
 const githubApi = require('../services/githubApi.js');
 const storageKeys = require('../services/storageKeys.js');
-const frontier = require('../search/crawling/frontier.js');
-const seenRepos = require('../search/crawling/seenRepos.js');
 const demoRepositories = require('../data/demoRepositories.js');
 
 function runCrawl(options, runtime, callback) {
@@ -15,7 +13,8 @@ function runCrawl(options, runtime, callback) {
   }
 
   const jobId = `crawl-${Date.now()}`;
-  const store = runtime.store;
+  const store = runtime.store || globalThis.distribution.gitgle.store;
+  const mr = runtime.executor || globalThis.distribution.gitgle.mr;
 
   let crawlStats = {
     jobId,
@@ -35,65 +34,24 @@ function runCrawl(options, runtime, callback) {
       return callback(new Error('No seeds found in seed file'));
     }
 
-    frontier.initFrontier(store, jobId, (err) => {
-      if (err) 
-        return callback(err);
-
-      seenRepos.initSeenRepos(store, jobId, (err, seen) => {
-        if (err) 
-            return callback(err);
-
-        // add seed repos to frontier
-        addSeedsToFrontier(store, jobId, seeds, (err) => {
-          if (err) 
-            return callback(err);
-
-          // run MapReduce crawl job
-          runCrawlJob(store, jobId, options, (err, stats) => {
-            if (err) {
-              return callback(err, {
-                ...crawlStats,
-                error: err.message,
-              });
-            }
-
-            crawlStats = {...crawlStats, ...stats};
-            crawlStats.endTime = Date.now();
-            crawlStats.duration = crawlStats.endTime - crawlStats.startTime;
-
-            callback(null, crawlStats);
-          });
+    runCrawlJob(store, mr, jobId, options, (err, stats) => {
+      if (err) {
+        return callback(err, {
+          ...crawlStats,
+          error: err.message,
         });
-      });
-    });
-  });
-}
-
-function addSeedsToFrontier(store, jobId, seeds, callback) {
-  let completed = 0;
-  let errors = [];
-
-  seeds.forEach((seed) => {
-    const entry = frontier.createFrontierEntry(seed.owner, seed.repo, {
-      source: 'seed',
-      priority: 10,
-    });
-
-    frontier.addToFrontier(store, jobId, entry, (err) => {
-      if (err) errors.push(err);
-      completed++;
-
-      if (completed === seeds.length) {
-        if (errors.length > 0) {
-          return callback(errors[0]);
-        }
-        callback(null);
       }
+
+      crawlStats = {...crawlStats, ...stats};
+      crawlStats.endTime = Date.now();
+      crawlStats.duration = crawlStats.endTime - crawlStats.startTime;
+
+      callback(null, crawlStats);
     });
   });
 }
 
-function runCrawlJob(store, jobId, options, callback) {
+function runCrawlJob(store, mr, jobId, options, callback) {
   let stats = {
     reposProcessed: 0,
     successful: 0,
@@ -101,7 +59,8 @@ function runCrawlJob(store, jobId, options, callback) {
     totalBytes: 0,
   };
 
-  let completed = 0;
+  const keys = [];
+  let stored = 0;
 
   demoRepositories.forEach(repo => {
     const metaKey = storageKeys.documentMetadataKey(repo.owner, repo.repo);
@@ -111,21 +70,44 @@ function runCrawlJob(store, jobId, options, callback) {
       url: repo.url,
       description: repo.description,
       language: repo.language,
-      stars: repo.stars
+      stars: repo.stars,
+      readme: repo.readme || '',
     };
 
-    store.put(metaKey, data, (err) => {
-      if (!err) {
-        stats.successful++;
-        stats.totalBytes += JSON.stringify(data).length;
-      } else {
-        stats.failed++;
-      }
-      stats.reposProcessed++;
-      completed++;
+    store.put(data, {key: metaKey, gid: 'gitgle'}, (err) => {
+      if (!err) keys.push(metaKey);
+      stored++;
 
-      if (completed === demoRepositories.length) {
-        callback(null, stats);
+      if (stored === demoRepositories.length) {
+        if (keys.length === 0) return callback(new Error('No repos stored'));
+
+        mr.exec({
+          keys,
+          map: function(key, repoData) {
+            if (!repoData) return [];
+            const docId = `${repoData.owner}/${repoData.repo}`;
+            const result = {};
+            result[docId] = repoData;
+            return [result];
+          },
+          reduce: function(docId, metadataList) {
+            const metadata = metadataList[0];
+            if (!metadata) return null;
+            const result = {};
+            result[docId] = metadata;
+            return result;
+          },
+        }, (err, results) => {
+          if (err) return callback(err);
+
+          stats.reposProcessed = results ? results.length : 0;
+          stats.successful = results ? results.length : 0;
+          stats.totalBytes = results
+            ? results.reduce((sum, r) => sum + JSON.stringify(r).length, 0)
+            : 0;
+
+          callback(null, stats);
+        });
       }
     });
   });
@@ -137,6 +119,5 @@ function runCrawlJob(store, jobId, options, callback) {
 
 module.exports = {
   runCrawl,
-  addSeedsToFrontier,
   runCrawlJob,
 };
