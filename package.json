@@ -9,9 +9,9 @@
   "scripts": {
     "start": "node distribution.js",
     "auto": "node autoRun.js",
-    "crawl": "node src/cli/crawl-cli.js",
-    "index": "node src/cli/index-cli.js",
-    "search": "node src/cli/search-cli.js"
+    "crawl": "node src/cli/crawlCli.js",
+    "index": "node src/cli/indexCli.js",
+    "search": "node src/cli/searchCli.js"
   },
   "dependencies": {
     "@brown-ds/distribution": "^0.2.32",
