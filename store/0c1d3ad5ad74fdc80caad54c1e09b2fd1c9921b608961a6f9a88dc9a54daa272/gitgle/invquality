@@ -1,0 +1,1 @@
+{"type":"object","value":{"term":{"type":"string","value":"quality"},"postings":{"type":"object","value":{"eslint/eslint":{"type":"number","value":"1"}}},"documentFrequency":{"type":"number","value":"1"}}}

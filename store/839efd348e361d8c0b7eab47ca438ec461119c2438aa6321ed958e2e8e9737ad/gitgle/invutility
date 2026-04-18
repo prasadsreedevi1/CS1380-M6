@@ -1,0 +1,1 @@
+{"type":"object","value":{"term":{"type":"string","value":"utility"},"postings":{"type":"object","value":{"lodash/lodash":{"type":"number","value":"1"}}},"documentFrequency":{"type":"number","value":"1"}}}

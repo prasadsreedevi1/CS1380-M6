@@ -1,0 +1,1 @@
+{"type":"object","value":{"term":{"type":"string","value":"application"},"postings":{"type":"object","value":{"angular/angular":{"type":"number","value":"1"},"ember/ember.js":{"type":"number","value":"1"},"docker/docker":{"type":"number","value":"1"}}},"documentFrequency":{"type":"number","value":"3"}}}

@@ -1,0 +1,1 @@
+{"type":"object","value":{"term":{"type":"string","value":"native"},"postings":{"type":"object","value":{"react-native/react-native":{"type":"number","value":"6"}}},"documentFrequency":{"type":"number","value":"1"}}}

@@ -1,0 +1,1 @@
+{"type":"object","value":{"term":{"type":"string","value":"server"},"postings":{"type":"object","value":{"mysql/mysql-server":{"type":"number","value":"4"},"nodejs/node":{"type":"number","value":"1"},"expressjs/express":{"type":"number","value":"1"},"pallets/flask":{"type":"number","value":"1"}}},"documentFrequency":{"type":"number","value":"4"}}}

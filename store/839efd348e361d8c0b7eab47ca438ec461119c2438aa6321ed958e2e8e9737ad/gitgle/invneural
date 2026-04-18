@@ -1,0 +1,1 @@
+{"type":"object","value":{"term":{"type":"string","value":"neural"},"postings":{"type":"object","value":{"pytorch/pytorch":{"type":"number","value":"1"}}},"documentFrequency":{"type":"number","value":"1"}}}

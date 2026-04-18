@@ -17,7 +17,9 @@ function parseSeedLine(line) {
   }
 
   if (trimmed.includes('/')) {
-    const [owner, repo] = trimmed.split('/').map(s => s.trim());
+    const idx = trimmed.indexOf('/');
+    const owner = trimmed.slice(0, idx).trim();
+    const repo = trimmed.slice(idx + 1).trim();
     if (owner && repo) {
       return {owner, repo};
     }

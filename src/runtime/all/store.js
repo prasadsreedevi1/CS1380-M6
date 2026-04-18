@@ -47,7 +47,11 @@ function store(config) {
 
       nodes.forEach((node) => {
         const remote = {node, service: 'store', method: 'get'};
-        distribution.local.comm.send([null], remote, (err, keys) => {
+        // Must send gid so workers list store/<nid>/<gid>/, not the default local/ dir.
+        distribution.local.comm.send(
+          [{key: null, gid: context.gid}],
+          remote,
+          (err, keys) => {
           completedRequests++;
           if (err) {
             errors.push(err);

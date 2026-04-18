@@ -1,0 +1,1 @@
+{"type":"object","value":{"term":{"type":"string","value":"backend"},"postings":{"type":"object","value":{"golang/go":{"type":"number","value":"1"},"nodejs/node":{"type":"number","value":"1"},"django/django":{"type":"number","value":"1"}}},"documentFrequency":{"type":"number","value":"3"}}}

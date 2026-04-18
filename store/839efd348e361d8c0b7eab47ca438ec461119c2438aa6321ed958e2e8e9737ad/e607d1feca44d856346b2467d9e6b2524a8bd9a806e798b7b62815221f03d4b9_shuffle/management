@@ -1,0 +1,1 @@
+{"type":"array","value":{"0":{"type":"object","value":{"docId":{"type":"string","value":"ansible/ansible"},"freq":{"type":"number","value":"1"}}},"1":{"type":"object","value":{"docId":{"type":"string","value":"reduxjs/redux"},"freq":{"type":"number","value":"1"}}}}}

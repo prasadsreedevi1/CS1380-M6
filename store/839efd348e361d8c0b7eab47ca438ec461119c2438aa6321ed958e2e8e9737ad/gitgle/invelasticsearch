@@ -1,0 +1,1 @@
+{"type":"object","value":{"term":{"type":"string","value":"elasticsearch"},"postings":{"type":"object","value":{"elastic/elasticsearch":{"type":"number","value":"4"}}},"documentFrequency":{"type":"number","value":"1"}}}

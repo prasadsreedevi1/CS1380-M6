@@ -1,0 +1,1 @@
+{"type":"object","value":{"term":{"type":"string","value":"terraform"},"postings":{"type":"object","value":{"hashicorp/terraform":{"type":"number","value":"4"}}},"documentFrequency":{"type":"number","value":"1"}}}

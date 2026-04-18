@@ -1,0 +1,1 @@
+{"type":"object","value":{"term":{"type":"string","value":"management"},"postings":{"type":"object","value":{"ansible/ansible":{"type":"number","value":"1"},"reduxjs/redux":{"type":"number","value":"1"}}},"documentFrequency":{"type":"number","value":"2"}}}

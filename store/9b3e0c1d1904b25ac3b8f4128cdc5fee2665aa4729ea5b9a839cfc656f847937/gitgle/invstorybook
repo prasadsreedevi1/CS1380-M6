@@ -1,0 +1,1 @@
+{"type":"object","value":{"term":{"type":"string","value":"storybook"},"postings":{"type":"object","value":{"storybook/storybook":{"type":"number","value":"6"}}},"documentFrequency":{"type":"number","value":"1"}}}

@@ -1,0 +1,1 @@
+{"type":"object","value":{"term":{"type":"string","value":"riot"},"postings":{"type":"object","value":{"riot/riot":{"type":"number","value":"6"}}},"documentFrequency":{"type":"number","value":"1"}}}

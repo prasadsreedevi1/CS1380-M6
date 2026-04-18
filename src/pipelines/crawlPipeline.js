@@ -6,6 +6,24 @@ const githubApi = require('../services/githubApi.js');
 const storageKeys = require('../services/storageKeys.js');
 const demoRepositories = require('../data/demoRepositories.js');
 
+function repoRecordForSeed(seed, demoList) {
+  const hit = demoList.find(
+    (r) => r.owner === seed.owner && r.repo === seed.repo,
+  );
+  if (hit) {
+    return hit;
+  }
+  return {
+    owner: seed.owner,
+    repo: seed.repo,
+    url: `https://github.com/${seed.owner}/${seed.repo}`,
+    description: `${seed.repo} repository from ${seed.owner}`,
+    language: 'Mixed',
+    stars: 0,
+    readme: `${seed.owner}/${seed.repo} - open source repository.`,
+  };
+}
+
 function runCrawl(options, runtime, callback) {
   if (!callback) {
     callback = runtime;
@@ -34,7 +52,9 @@ function runCrawl(options, runtime, callback) {
       return callback(new Error('No seeds found in seed file'));
     }
 
-    runCrawlJob(store, mr, jobId, options, (err, stats) => {
+    const repos = seeds.map((s) => repoRecordForSeed(s, demoRepositories));
+
+    runCrawlJob(store, mr, jobId, options, repos, (err, stats) => {
       if (err) {
         return callback(err, {
           ...crawlStats,
@@ -51,7 +71,7 @@ function runCrawl(options, runtime, callback) {
   });
 }
 
-function runCrawlJob(store, mr, jobId, options, callback) {
+function runCrawlJob(store, mr, jobId, options, repos, callback) {
   let stats = {
     reposProcessed: 0,
     successful: 0,
@@ -59,62 +79,79 @@ function runCrawlJob(store, mr, jobId, options, callback) {
     totalBytes: 0,
   };
 
-  const keys = [];
-  let stored = 0;
+  globalThis.distribution.local.groups.get('gitgle', (err, nodes) => {
+    if (err) return callback(err);
 
-  demoRepositories.forEach(repo => {
-    const metaKey = storageKeys.documentMetadataKey(repo.owner, repo.repo);
-    const data = {
-      owner: repo.owner,
-      repo: repo.repo,
-      url: repo.url,
-      description: repo.description,
-      language: repo.language,
-      stars: repo.stars,
-      readme: repo.readme || '',
-    };
+    const nodeList = Object.values(nodes);
+    if (nodeList.length === 0) {
+      return callback(new Error('No nodes in gitgle group'));
+    }
 
-    store.put(data, {key: metaKey, gid: 'gitgle'}, (err) => {
-      if (!err) keys.push(metaKey);
-      stored++;
+    if (repos.length === 0) {
+      return callback(new Error('No repositories to crawl'));
+    }
 
-      if (stored === demoRepositories.length) {
-        if (keys.length === 0) return callback(new Error('No repos stored'));
+    // Use the distributed group store so each key lands on the same node that
+    // store.get / mr.exec will hash to. (Round-robin comm.send to workers breaks that.)
+    const keys = [];
+    let completed = 0;
 
-        mr.exec({
-          keys,
-          map: function(key, repoData) {
-            if (!repoData) return [];
-            const docId = `${repoData.owner}/${repoData.repo}`;
-            const result = {};
-            result[docId] = repoData;
-            return [result];
-          },
-          reduce: function(docId, metadataList) {
-            const metadata = metadataList[0];
-            if (!metadata) return null;
-            const result = {};
-            result[docId] = metadata;
-            return result;
-          },
-        }, (err, results) => {
-          if (err) return callback(err);
-
-          stats.reposProcessed = results ? results.length : 0;
-          stats.successful = results ? results.length : 0;
-          stats.totalBytes = results
-            ? results.reduce((sum, r) => sum + JSON.stringify(r).length, 0)
-            : 0;
-
-          callback(null, stats);
-        });
+    function tryFinishMapReduce() {
+      if (completed < repos.length) {
+        return;
       }
+      if (keys.length === 0) {
+        return callback(new Error('No repos stored'));
+      }
+
+      mr.exec({
+        keys,
+        map: function(key, repoData) {
+          if (!repoData) return [];
+          const docId = `${repoData.owner}/${repoData.repo}`;
+          const result = {};
+          result[docId] = repoData;
+          return [result];
+        },
+        reduce: function(docId, metadataList) {
+          const metadata = metadataList[0];
+          if (!metadata) return null;
+          const result = {};
+          result[docId] = metadata;
+          return result;
+        },
+      }, (err, results) => {
+        if (err) return callback(err);
+
+        stats.reposProcessed = results ? results.length : 0;
+        stats.successful = results ? results.length : 0;
+        stats.totalBytes = results
+          ? results.reduce((sum, r) => sum + JSON.stringify(r).length, 0)
+          : 0;
+
+        callback(null, stats);
+      });
+    }
+
+    repos.forEach((repo) => {
+      const metaKey = storageKeys.documentMetadataKey(repo.owner, repo.repo);
+      const data = {
+        owner: repo.owner,
+        repo: repo.repo,
+        url: repo.url,
+        description: repo.description,
+        language: repo.language,
+        stars: repo.stars,
+        readme: repo.readme || '',
+      };
+
+      store.put(data, {key: metaKey, gid: 'gitgle'}, (err) => {
+        if (!err) keys.push(metaKey);
+        completed++;
+        tryFinishMapReduce();
+      });
     });
   });
-
-  if (demoRepositories.length === 0) {
-    callback(null, stats);
-  }
 }
 
 module.exports = {
