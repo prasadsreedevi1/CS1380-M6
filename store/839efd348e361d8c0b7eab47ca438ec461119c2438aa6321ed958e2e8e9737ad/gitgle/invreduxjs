@@ -1,1 +1,0 @@
-{"type":"object","value":{"term":{"type":"string","value":"reduxjs"},"postings":{"type":"object","value":{"reduxjs/redux":{"type":"number","value":"2"}}},"documentFrequency":{"type":"number","value":"1"}}}

@@ -1,1 +1,0 @@
-{"type":"object","value":{"term":{"type":"string","value":"django"},"postings":{"type":"object","value":{"django/django":{"type":"number","value":"6"}}},"documentFrequency":{"type":"number","value":"1"}}}

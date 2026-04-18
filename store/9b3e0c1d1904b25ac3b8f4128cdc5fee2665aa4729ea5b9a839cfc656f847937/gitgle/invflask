@@ -1,1 +1,0 @@
-{"type":"object","value":{"term":{"type":"string","value":"flask"},"postings":{"type":"object","value":{"pallets/flask":{"type":"number","value":"4"}}},"documentFrequency":{"type":"number","value":"1"}}}

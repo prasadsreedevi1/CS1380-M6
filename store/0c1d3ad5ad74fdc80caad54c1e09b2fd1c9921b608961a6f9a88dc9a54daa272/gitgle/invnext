@@ -1,1 +1,0 @@
-{"type":"object","value":{"term":{"type":"string","value":"next"},"postings":{"type":"object","value":{"vercel/next.js":{"type":"number","value":"4"}}},"documentFrequency":{"type":"number","value":"1"}}}

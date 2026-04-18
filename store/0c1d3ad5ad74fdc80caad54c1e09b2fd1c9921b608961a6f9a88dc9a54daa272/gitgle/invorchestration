@@ -1,1 +1,0 @@
-{"type":"object","value":{"term":{"type":"string","value":"orchestration"},"postings":{"type":"object","value":{"kubernetes/kubernetes":{"type":"number","value":"1"}}},"documentFrequency":{"type":"number","value":"1"}}}

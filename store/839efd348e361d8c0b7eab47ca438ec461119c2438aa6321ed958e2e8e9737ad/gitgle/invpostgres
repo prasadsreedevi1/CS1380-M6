@@ -1,1 +1,0 @@
-{"type":"object","value":{"term":{"type":"string","value":"postgres"},"postings":{"type":"object","value":{"postgres/postgres":{"type":"number","value":"6"}}},"documentFrequency":{"type":"number","value":"1"}}}

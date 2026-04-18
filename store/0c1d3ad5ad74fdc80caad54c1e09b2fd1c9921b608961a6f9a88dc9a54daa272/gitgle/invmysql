@@ -1,1 +1,0 @@
-{"type":"object","value":{"term":{"type":"string","value":"mysql"},"postings":{"type":"object","value":{"mysql/mysql-server":{"type":"number","value":"6"}}},"documentFrequency":{"type":"number","value":"1"}}}

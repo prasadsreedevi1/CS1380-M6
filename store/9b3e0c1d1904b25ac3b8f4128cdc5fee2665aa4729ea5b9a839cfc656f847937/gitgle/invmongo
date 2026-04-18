@@ -1,1 +1,0 @@
-{"type":"object","value":{"term":{"type":"string","value":"mongo"},"postings":{"type":"object","value":{"mongodb/mongo":{"type":"number","value":"4"}}},"documentFrequency":{"type":"number","value":"1"}}}

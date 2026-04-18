@@ -1,1 +1,0 @@
-{"type":"object","value":{"term":{"type":"string","value":"prometheus"},"postings":{"type":"object","value":{"prometheus/prometheus":{"type":"number","value":"6"}}},"documentFrequency":{"type":"number","value":"1"}}}

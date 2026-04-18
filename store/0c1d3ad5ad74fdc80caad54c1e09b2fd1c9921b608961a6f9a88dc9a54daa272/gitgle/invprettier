@@ -1,1 +1,0 @@
-{"type":"object","value":{"term":{"type":"string","value":"prettier"},"postings":{"type":"object","value":{"prettier/prettier":{"type":"number","value":"6"}}},"documentFrequency":{"type":"number","value":"1"}}}

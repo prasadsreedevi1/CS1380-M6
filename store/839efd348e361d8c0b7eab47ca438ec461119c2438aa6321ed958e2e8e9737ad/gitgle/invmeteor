@@ -1,1 +1,0 @@
-{"type":"object","value":{"term":{"type":"string","value":"meteor"},"postings":{"type":"object","value":{"meteor/meteor":{"type":"number","value":"6"}}},"documentFrequency":{"type":"number","value":"1"}}}

@@ -1,1 +1,0 @@
-{"type":"object","value":{"term":{"type":"string","value":"ansible"},"postings":{"type":"object","value":{"ansible/ansible":{"type":"number","value":"6"}}},"documentFrequency":{"type":"number","value":"1"}}}

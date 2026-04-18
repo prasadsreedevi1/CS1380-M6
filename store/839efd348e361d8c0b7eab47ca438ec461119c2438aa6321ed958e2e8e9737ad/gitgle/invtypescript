@@ -1,1 +1,0 @@
-{"type":"object","value":{"term":{"type":"string","value":"typescript"},"postings":{"type":"object","value":{"angular/angular":{"type":"number","value":"1"},"prettier/prettier":{"type":"number","value":"1"},"microsoft/typescript":{"type":"number","value":"5"}}},"documentFrequency":{"type":"number","value":"3"}}}

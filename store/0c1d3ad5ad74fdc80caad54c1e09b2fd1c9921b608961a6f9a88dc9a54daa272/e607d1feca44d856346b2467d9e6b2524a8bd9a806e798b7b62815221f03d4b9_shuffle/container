@@ -1,1 +1,0 @@
-{"type":"array","value":{"0":{"type":"object","value":{"docId":{"type":"string","value":"docker/docker"},"freq":{"type":"number","value":"1"}}},"1":{"type":"object","value":{"docId":{"type":"string","value":"kubernetes/kubernetes"},"freq":{"type":"number","value":"1"}}}}}

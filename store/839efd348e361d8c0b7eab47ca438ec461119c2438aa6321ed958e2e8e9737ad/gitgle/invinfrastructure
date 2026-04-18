@@ -1,1 +1,0 @@
-{"type":"object","value":{"term":{"type":"string","value":"infrastructure"},"postings":{"type":"object","value":{"hashicorp/terraform":{"type":"number","value":"1"}}},"documentFrequency":{"type":"number","value":"1"}}}

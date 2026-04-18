@@ -1,1 +1,0 @@
-{"type":"object","value":{"term":{"type":"string","value":"client"},"postings":{"type":"object","value":{"axios/axios":{"type":"number","value":"1"}}},"documentFrequency":{"type":"number","value":"1"}}}

@@ -1,1 +1,0 @@
-{"type":"object","value":{"term":{"type":"string","value":"docker"},"postings":{"type":"object","value":{"docker/docker":{"type":"number","value":"6"}}},"documentFrequency":{"type":"number","value":"1"}}}

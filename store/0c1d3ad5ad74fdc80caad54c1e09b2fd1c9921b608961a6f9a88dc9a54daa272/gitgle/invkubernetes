@@ -1,1 +1,0 @@
-{"type":"object","value":{"term":{"type":"string","value":"kubernetes"},"postings":{"type":"object","value":{"kubernetes/kubernetes":{"type":"number","value":"6"}}},"documentFrequency":{"type":"number","value":"1"}}}

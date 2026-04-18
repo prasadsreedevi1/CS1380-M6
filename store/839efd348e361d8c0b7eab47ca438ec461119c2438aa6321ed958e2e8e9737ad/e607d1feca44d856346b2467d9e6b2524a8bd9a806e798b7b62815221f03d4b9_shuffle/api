@@ -1,1 +1,0 @@
-{"type":"array","value":{"0":{"type":"object","value":{"docId":{"type":"string","value":"graphql/graphql-js"},"freq":{"type":"number","value":"1"}}},"1":{"type":"object","value":{"docId":{"type":"string","value":"expressjs/express"},"freq":{"type":"number","value":"1"}}}}}

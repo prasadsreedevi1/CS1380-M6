@@ -1,1 +1,0 @@
-{"type":"object","value":{"term":{"type":"string","value":"progressive"},"postings":{"type":"object","value":{"vuejs/vue":{"type":"number","value":"1"}}},"documentFrequency":{"type":"number","value":"1"}}}
