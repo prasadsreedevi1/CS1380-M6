@@ -1,0 +1,99 @@
+@startuml M6-Search-Example
+
+' Concrete example: user searches for "python" (11 numbered steps)
+' Shows complete query flow with actual data and real TF-IDF scores
+' Step 1-2: Parse and normalize query
+' Step 3-4: Look up term in distributed index (returns 3 candidate documents)
+' Step 5-6: Calculate TF-IDF scores (0.85, 0.62, 0.45)
+' Step 7-8: Apply metadata boosts (stars, language, topics)
+' Step 9-10: Combine scores (75% TF-IDF + 25% metadata)
+' Step 11: Rank results and format for display
+
+!define BGCOLOR #F5F5F5
+skinparam backgroundColor BGCOLOR
+skinparam sequenceActorBackgroundColor #FFFFFF
+skinparam sequenceActorBorderColor #333
+skinparam sequenceParticipantBackgroundColor #E8F4F8
+skinparam sequenceParticipantBorderColor #1F77B4
+skinparam arrowColor #333
+skinparam shadowing false
+
+title M6 Search Engine - Complete Query Example: "python"
+
+actor User
+participant CLI
+participant "Query\nParser"
+participant "Query\nProcessor"
+participant "Search\nService"
+participant "M4 Store"
+participant "TF-IDF\nScorer"
+participant "Metadata\nBoost"
+participant "Score\nCalculator"
+participant "Results\nRanker"
+participant "Result\nFormatter"
+
+autonumber
+
+User -> CLI: search python
+
+CLI -> "Query\nParser": input: "python"
+
+"Query\nParser" -> "Query\nParser": parse query\noutput: {term: "python"}
+
+"Query\nParser" -> "Query\nProcessor": {term: "python"}
+
+"Query\nProcessor" -> "Query\nProcessor": normalize text:\n"python" -> lowercase -> stem
+
+"Query\nProcessor" -> "Search\nService": processed: "python"
+
+"Search\nService" -> "M4 Store": lookup index:\nwhere term = "python"?
+
+"M4 Store" -> "M4 Store": find in\ndistributed store\n(Node 2)
+
+"M4 Store" -> "Search\nService": return postings:\nterm: "python"\npostings: [123, 456, 789]\ndf: 3
+
+"Search\nService" -> "TF-IDF\nScorer": documents: [123, 456, 789]\nquery term: "python"
+
+"TF-IDF\nScorer" -> "TF-IDF\nScorer": calculate TF-IDF:\ndoc 123: 0.85\ndoc 456: 0.62\ndoc 789: 0.45
+
+"TF-IDF\nScorer" -> "Metadata\nBoost": TF-IDF scores
+
+"Metadata\nBoost" -> "Metadata\nBoost": apply boosts:\ndoc 123: +0.1 (stars)\ndoc 456: +0.05 (lang)\ndoc 789: +0.0
+
+"Metadata\nBoost" -> "Score\nCalculator": TF-IDF + boosts
+
+"Score\nCalculator" -> "Score\nCalculator": combine scores:\nTF-IDF weight: 75%\nMetadata weight: 25%\n\ndoc 123: 0.85*0.75+0.1*0.25=0.663\ndoc 456: 0.62*0.75+0.05*0.25=0.478\ndoc 789: 0.45*0.75+0.0*0.25=0.338
+
+"Score\nCalculator" -> "Results\nRanker": scored documents
+
+"Results\nRanker" -> "Results\nRanker": sort by score:\n[123:0.663, 456:0.478, 789:0.338]
+
+"Results\nRanker" -> "Result\nFormatter": ranked results
+
+"Result\nFormatter" -> "Result\nFormatter": format output:\n1. python-awesome\n   (123 stars, Python)\n2. python-basics\n   (45 stars, Python)\n3. python-data\n   (12 stars, Python)
+
+"Result\nFormatter" -> CLI: formatted results
+
+CLI -> User: display:\n1. python-awesome (123 stars)\n2. python-basics (45 stars)\n3. python-data (12 stars)
+
+note right of "Query\nParser"
+Step 2-3: Parse and normalize
+query string to standardized form
+end note
+
+note right of "Search\nService"
+Step 4-5: Lookup index in
+distributed M4 store
+end note
+
+note right of "Score\nCalculator"
+Step 8: Final scoring combines
+TF-IDF (75%) + metadata (25%)
+end note
+
+note right of "Result\nFormatter"
+Step 10: Format results with
+metadata (stars, language)
+end note
+
+@enduml

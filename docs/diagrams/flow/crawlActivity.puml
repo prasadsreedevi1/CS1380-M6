@@ -1,0 +1,96 @@
+@startuml M6-Crawl-Activity
+
+' Crawl operation activity flow: from seed file to stored documents
+' Shows all steps: load seeds -> fetch API -> parse -> deduplicate -> store
+' Includes error handling and retry logic
+
+!define BGCOLOR #F5F5F5
+skinparam backgroundColor BGCOLOR
+skinparam activityBorderColor #333
+skinparam activityBackgroundColor #E8F4F8
+skinparam arrowColor #333
+skinparam shadowing false
+
+title M6 Search Engine - Crawl Operation Activity Flow
+
+start
+:Load seed file
+(list of repos);
+:Parse repository
+owner/name pairs;
+
+repeat
+  :Get repo from queue;
+  
+  :Fetch metadata from
+  GitHub API;
+  
+  if (Success?) then (yes)
+    :Download README
+    markdown content;
+    
+    if (README exists?) then (yes)
+      :Check if repo
+      already indexed;
+      
+      if (Already crawled?) then (yes)
+        :Skip (deduplication);
+      else (no)
+        :Mark as seen;
+        :Create document
+        object;
+        :Store in M4
+        (KV Store);
+        
+        note right
+          Document includes:
+          - repo name/owner
+          - README content
+          - star count
+          - programming language
+          - topics/tags
+        end note
+      endif
+      
+    else (not found)
+      :Log warning;
+      :Skip repo;
+    endif
+    
+  else (failed)
+    :Increment retry
+    counter;
+    
+    if (Retries < 3?) then (yes)
+      :Wait (exponential
+      backoff);
+      :Re-queue repo;
+    else (exceeded)
+      :Mark as failed;
+      :Log error;
+    endif
+  endif
+  
+repeat while (More repos?)
+
+:Crawl complete
+(N repos fetched);
+:Report stats:
+- repos crawled
+- repos failed
+- duplicates skipped;
+
+stop
+
+note right
+  Performance targets:
+  - Fetch rate: ~10 repos/sec
+  - Total crawl time: 5-10 seconds
+    for 100 repos
+  
+  Bottleneck: GitHub API
+  rate limit ~60 req/min
+  (with auth: 5000 req/hr)
+end note
+
+@enduml

@@ -1,0 +1,76 @@
+@startuml M6-Use-Case
+
+' What can an end user do with the M6 search engine?
+' Primary use case: search repositories, view results
+' Secondary use cases: filter, refine, export
+
+!define BGCOLOR #F5F5F5
+skinparam backgroundColor BGCOLOR
+skinparam actorBorderColor #333
+skinparam usecaseBorderColor #333
+skinparam arrowColor #666
+skinparam shadowing false
+
+title M6 Search Engine - What Can You Do?
+
+actor "User" as USER
+
+rectangle "M6 Search Engine" {
+  usecase "Search Repositories" as UC_SEARCH
+  usecase "Enter Query\n(e.g. 'javascript async')" as UC_QUERY
+  usecase "Filter by Language\n(Python, JavaScript, etc)" as UC_FILTER_LANG
+  usecase "Filter by Owner" as UC_FILTER_OWNER
+  usecase "Sort by Relevance\n(TF-IDF score)" as UC_SORT
+  usecase "View Results\n(top 10)" as UC_VIEW_RESULTS
+  usecase "View Repository Details" as UC_VIEW_DETAILS
+  usecase "View README" as UC_VIEW_README
+  usecase "View Star Count" as UC_VIEW_STARS
+  usecase "Refine Search" as UC_REFINE
+}
+
+USER --> UC_SEARCH
+UC_SEARCH --> UC_QUERY
+UC_SEARCH --> UC_FILTER_LANG
+UC_SEARCH --> UC_FILTER_OWNER
+UC_SEARCH --> UC_SORT
+UC_SORT --> UC_VIEW_RESULTS
+
+UC_VIEW_RESULTS --> UC_VIEW_DETAILS
+UC_VIEW_DETAILS --> UC_VIEW_README
+UC_VIEW_DETAILS --> UC_VIEW_STARS
+
+UC_VIEW_RESULTS --> UC_REFINE
+UC_REFINE --> UC_SEARCH
+
+note right of UC_QUERY
+  Example queries:
+  "python machine learning"
+  "javascript framework"
+  "nodejs async"
+end note
+
+note right of UC_FILTER_LANG
+  Narrow down results
+  by programming language:
+  Python, JavaScript, Java,
+  Go, Rust, TypeScript, etc.
+end note
+
+note right of UC_SORT
+  Results are automatically
+  ranked by relevance:
+  - How often term appears (TF)
+  - How rare term is (IDF)
+  - Popularity (stars)
+  - Language match
+end note
+
+note right of UC_VIEW_DETAILS
+  See:
+  - Full repository name
+  - Star count
+  - Programming language
+  - Topics/tags
+end note
+
+@enduml

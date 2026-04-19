@@ -1,0 +1,132 @@
+// @ts-check
+/**
+ * @typedef {import("../types.js").Node} Node
+ * @typedef {import("../types.js").ID} ID
+ * @typedef {import("../types.js").NID} NID
+ * @typedef {import("../types.js").SID} SID
+ * @typedef {import("../types.js").Hasher} Hasher
+ */
+
+const assert = require('assert');
+const crypto = require('crypto');
+
+/**
+ * @param {any} obj
+ * @returns {ID}
+ */
+function getID(obj) {
+  const hash = crypto.createHash('sha256');
+  hash.update(JSON.stringify(obj));
+  return hash.digest('hex');
+}
+
+/**
+ * The NID is the SHA256 hash of the JSON representation of the node
+ * @param {Node} node
+ * @returns {NID}
+ */
+function getNID(node) {
+  node = {ip: node.ip, port: node.port};
+  return getID(node);
+}
+
+/**
+ * The SID is the first 5 characters of the NID
+ * @param {Node} node
+ * @returns {SID}
+ */
+function getSID(node) {
+  return getNID(node).substring(0, 5);
+}
+
+/**
+ * @param {any} message
+ * @returns {string}
+ */
+function getMID(message) {
+  const msg = {};
+  msg.date = new Date().getTime();
+  msg.mss = message;
+  return getID(msg);
+}
+
+/**
+ * @param {string} id
+ * @returns {bigint}
+ */
+function idToNum(id) {
+  assert(typeof id === 'string', 'idToNum: id is not in KID form!');
+  const trimmed = id.startsWith('0x') ? id.slice(2) : id;
+  if (/^[0-9a-fA-F]+$/.test(trimmed)) {
+    return BigInt(`0x${trimmed}`);
+  }
+  return BigInt(id);
+}
+
+/** @type { Hasher } */
+const naiveHash = (kid, nids) => {
+  const sortedNids = [...nids].sort();
+  const index = Number(idToNum(kid) % BigInt(sortedNids.length));
+  return sortedNids[index];
+};
+
+/** @type { Hasher } */
+const consistentHash = (kid, nids) => {
+  const ring = [];
+  ring.push({num: idToNum(kid), id: kid});
+
+  for (let i = 0; i < nids.length; i++) {
+    ring.push({num: idToNum(nids[i]), id: nids[i]});
+  }
+
+  ring.sort((a, b) => {
+    if (a.num < b.num) {
+      return -1;
+    }
+    if (a.num > b.num) {
+      return 1;
+    }
+    return 0;
+  });
+
+  let kidIndex = -1;
+  for (let i = 0; i < ring.length; i++) {
+    if (ring[i].id === kid) {
+      kidIndex = i;
+      break;
+    }
+  }
+
+  const nextIndex = (kidIndex + 1) % ring.length; // wrap around the ring
+  return ring[nextIndex].id;
+};
+
+/** @type { Hasher } */
+const rendezvousHash = (kid, nids) => {
+  let maxHash = BigInt(0);
+  let selectedNid = nids[0];
+
+  for (let i = 0; i < nids.length; i++) {
+    const mergedId = kid + nids[i];
+    const hash = getID(mergedId);
+    const hashNum = idToNum(hash);
+
+    if (hashNum > maxHash) {
+      maxHash = hashNum;
+      selectedNid = nids[i];
+    }
+  }
+
+  return selectedNid;
+};
+
+module.exports = {
+  getID,
+  getNID,
+  getSID,
+  getMID,
+  naiveHash,
+  consistentHash,
+  rendezvousHash,
+};
+

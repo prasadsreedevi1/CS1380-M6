@@ -1,0 +1,166 @@
+@startuml M6-Crawl-Index-Search-Sequence
+
+' Complete end-to-end workflow showing all 3 phases of the search engine
+' Phase 1 (CRAWL): Fetch repository metadata from GitHub API
+' Phase 2 (INDEX): Process documents and build inverted index with TF/DF statistics
+' Phase 3 (SEARCH): Execute user queries and return ranked results
+' Shows interaction between CLI, pipelines, GitHub API, and M4 distributed store
+
+!define BGCOLOR #F5F5F5
+!define ACCENTCOLOR #1F77B4
+!define ACCENTCOLOR2 #2CA02C
+!define ACCENTCOLOR3 #FF7F0E
+
+skinparam backgroundColor BGCOLOR
+skinparam sequenceActorBorderColor ACCENTCOLOR
+skinparam sequenceLifeLineBorderColor #666
+skinparam sequenceArrowColor #666
+
+title M6 Search Engine - End-to-End Crawl-Index-Search Workflow
+
+actor User
+participant "CLI" as CLI
+participant "Crawl\nPipeline" as CRAWL
+participant "GitHub\nAPI" as GH
+participant "Index\nPipeline" as INDEX
+participant "Document\nProcessor" as DOC
+participant "M4 Store" as M4
+participant "Search\nPipeline" as SEARCH
+participant "Query\nService" as QS
+
+== PHASE 1: CRAWL - Fetch Repository Metadata ==
+
+User -> CLI: crawl(seed_file)
+activate CLI
+
+CLI -> CRAWL: start(seeds)
+activate CRAWL
+
+CRAWL -> CRAWL: loadSeeds(seed_file.txt)
+CRAWL -> CRAWL: parseRepositories()
+
+loop For each Repository
+  CRAWL -> GH: getMetadata(owner, repo)
+  activate GH
+  GH --> CRAWL: {name, stars, language, url}
+  deactivate GH
+  
+  CRAWL -> GH: getReadmeContent(owner, repo)
+  activate GH
+  GH --> CRAWL: markdown_content
+  deactivate GH
+  
+  CRAWL -> CRAWL: createRepoDocument()
+end
+
+CRAWL -> M4: storeDocuments(documents)
+activate M4
+M4 --> CRAWL: ✓ stored
+deactivate M4
+
+CRAWL --> CLI: ✓ Crawl complete (N repos)
+deactivate CRAWL
+
+== PHASE 2: INDEX - Build Search Index ==
+
+CLI -> INDEX: start(documents)
+activate INDEX
+
+loop Process Batches of Documents
+  INDEX -> DOC: process(document)
+  activate DOC
+  
+  DOC -> DOC: extractReadmeText()
+  DOC -> DOC: normalizeText()
+  DOC -> DOC: tokenize()
+  DOC -> DOC: stem()
+  DOC -> DOC: generateNgrams()
+  
+  DOC --> INDEX: {terms, frequencies, metadata}
+  deactivate DOC
+  
+  INDEX -> INDEX: buildInvertedIndex()
+  INDEX -> INDEX: calculateTermFrequencies()
+  INDEX -> INDEX: calculateDocumentFrequency()
+end
+
+INDEX -> M4: storeInvertedIndex(index)
+activate M4
+M4 --> INDEX: ✓ index stored
+deactivate M4
+
+INDEX -> M4: storeTfData(tf_stats)
+activate M4
+M4 --> INDEX: ✓ TF data stored
+deactivate M4
+
+INDEX -> M4: storeDfData(df_stats)
+activate M4
+M4 --> INDEX: ✓ DF data stored
+deactivate M4
+
+INDEX --> CLI: ✓ Index complete (M terms)
+deactivate INDEX
+
+== PHASE 3: SEARCH - Execute Queries ==
+
+CLI -> SEARCH: start()
+activate SEARCH
+
+User -> CLI: search("javascript async")
+
+CLI -> SEARCH: query("javascript async")
+activate QS
+
+QS -> QS: parseQuery()
+QS -> QS: normalizeTerms()
+
+loop For each Term
+  QS -> M4: getPostings(term)
+  activate M4
+  M4 --> QS: [{docId, tf}, ...]
+  deactivate M4
+end
+
+QS -> QS: collectCandidateDocuments()
+
+loop For each Document
+  QS -> QS: calculateTfIdf(term, doc)
+  QS -> QS: applyMetadataBoost()
+  QS -> QS: calculateCombinedScore()
+end
+
+QS -> QS: sortByScore()
+QS -> QS: applyFilters()
+QS -> QS: limitResults(topK)
+
+QS --> SEARCH: SearchResult[]
+deactivate QS
+
+SEARCH -> CLI: results
+deactivate SEARCH
+
+CLI -> CLI: formatResults(results)
+CLI --> User: Display top K results
+
+note over User, M4
+  CRAWL:  ~100 repos, 5-10 seconds
+  INDEX:  ~10000 terms, 2-5 seconds
+  SEARCH: ~30ms per query
+end note
+
+note right of DOC
+  Full text processing:
+  extract -> normalize ->
+  tokenize -> stem -> ngrams
+end note
+
+note right of M4
+  Distributed storage:
+  - Inverted index
+  - TF statistics
+  - DF statistics
+  - Document metadata
+end note
+
+@enduml

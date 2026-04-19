@@ -1,0 +1,143 @@
+@startuml M6-Component
+
+' It shows the component architecture for distributed GitHub search engine
+' all modules and how they connect: CLI to Pipelines to Processing Logic to Runtime Storage
+' three main phases: Crawl GitHub repos, Index documents with TF-IDF, Search and rank results
+
+!define BGCOLOR #F5F5F5
+skinparam backgroundColor BGCOLOR
+skinparam componentFontColor #333
+skinparam ArrowColor #333
+skinparam packageBorderColor #666
+skinparam packageBackgroundColor #FFFFFF
+skinparam componentBorderColor #666
+skinparam componentBackgroundColor #FFFFFF
+skinparam shadowing false
+
+title M6 Distributed Search Engine - Component Architecture
+
+package "Web/CLI Interface" {
+  component [Search CLI] as CLI_SEARCH
+  component [Crawl CLI] as CLI_CRAWL
+  component [Index CLI] as CLI_INDEX
+  component [Admin CLI] as CLI_ADMIN
+}
+
+package "Core Pipelines" {
+  component [Crawl Pipeline] as PIPE_CRAWL
+  component [Index Pipeline] as PIPE_INDEX
+  component [Search Pipeline] as PIPE_SEARCH
+}
+
+package "Search Processing" {
+  
+  package "Crawling Logic" {
+    component [Frontier Manager] as CRL_FRONTIER
+    component [Seen Repos Tracker] as CRL_SEEN
+    component [GitHub API Client] as CRL_GITHUB
+  }
+  
+  package "Indexing Logic" {
+    component [Text Parser] as IDX_PARSER
+    component [Inverted Index Builder] as IDX_BUILDER
+    component [TF Calculator] as IDX_TF
+    component [PageRank Engine] as IDX_PAGERANK
+  }
+  
+  package "Query & Ranking" {
+    component [Query Parser] as QRY_PARSER
+    component [Query Processor] as QRY_PROCESSOR
+    component [TF-IDF Scorer] as QRY_TFIDF
+    component [Metadata Booster] as QRY_BOOST
+    component [Results Ranker] as QRY_RANK
+  }
+  
+  package "Text Processing" {
+    component [Tokenizer] as TXT_TOKEN
+    component [Normalizer] as TXT_NORM
+    component [Stemmer] as TXT_STEM
+    component [N-gram Generator] as TXT_NGRAM
+  }
+}
+
+package "Distributed Runtime (M1-M5)" {
+  component [MapReduce Engine] as RT_MR
+  component [Gossip Protocol] as RT_GOSSIP
+  component [Group Management] as RT_GROUP
+  component [Distributed Store] as RT_STORE
+}
+
+package "Storage & Services" {
+  component [Distributed Key-Value Store] as SVC_STORE
+  component [Result Formatter] as SVC_FORMATTER
+  component [Seed Loader] as SVC_SEEDS
+  component [Storage Keys Manager] as SVC_KEYS
+}
+
+package "External Services" {
+  component [GitHub API] as EXT_GITHUB
+}
+
+' CLI to Pipelines
+CLI_CRAWL --> PIPE_CRAWL
+CLI_INDEX --> PIPE_INDEX
+CLI_SEARCH --> PIPE_SEARCH
+CLI_ADMIN --> RT_STORE
+
+' Pipelines to Logic
+PIPE_CRAWL --> CRL_FRONTIER
+PIPE_CRAWL --> CRL_SEEN
+PIPE_CRAWL --> CRL_GITHUB
+
+PIPE_INDEX --> IDX_PARSER
+PIPE_INDEX --> IDX_BUILDER
+PIPE_INDEX --> IDX_TF
+PIPE_INDEX --> IDX_PAGERANK
+
+PIPE_SEARCH --> QRY_PARSER
+PIPE_SEARCH --> QRY_PROCESSOR
+PIPE_SEARCH --> QRY_TFIDF
+PIPE_SEARCH --> QRY_BOOST
+PIPE_SEARCH --> QRY_RANK
+
+' Text Processing
+IDX_PARSER --> TXT_TOKEN
+IDX_PARSER --> TXT_NORM
+TXT_TOKEN --> TXT_STEM
+TXT_STEM --> TXT_NGRAM
+
+QRY_PROCESSOR --> TXT_TOKEN
+QRY_PROCESSOR --> TXT_NORM
+QRY_PROCESSOR --> TXT_STEM
+QRY_PROCESSOR --> TXT_NGRAM
+
+' To Runtime & Storage
+CRL_FRONTIER --> RT_MR
+IDX_BUILDER --> RT_MR
+QRY_RANK --> RT_STORE
+
+PIPE_CRAWL --> SVC_STORE
+PIPE_INDEX --> SVC_STORE
+PIPE_SEARCH --> SVC_STORE
+
+' External
+CRL_GITHUB --> EXT_GITHUB
+
+' Runtime components
+RT_MR -.-> RT_GOSSIP
+RT_MR -.-> RT_GROUP
+RT_MR -.-> RT_STORE
+
+note right of RT_MR
+  Executes distributed
+  crawl and index jobs
+  across all nodes
+end note
+
+note right of RT_STORE
+  Sharded KV store
+  persists all indexing
+  and search state
+end note
+
+@enduml

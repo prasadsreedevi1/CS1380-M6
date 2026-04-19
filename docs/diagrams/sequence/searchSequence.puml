@@ -1,0 +1,117 @@
+@startuml M6-Search-Sequence
+
+' Query processing sequence with KV store lookup and scoring
+' Shows how query flows: Parse -> Process -> Search -> TF-IDF -> Metadata Boost -> Score
+' For each query term: look up postings in M4 store (distributed key-value store)
+' For each candidate document: calculate TF, IDF, boosts, and combined final score
+' Then rank, filter, and limit results before display
+
+!define BGCOLOR #F5F5F5
+!define ACCENTCOLOR #1F77B4
+
+skinparam backgroundColor BGCOLOR
+skinparam sequenceActorBorderColor ACCENTCOLOR
+skinparam sequenceLifeLineBorderColor ACCENTCOLOR
+skinparam sequenceArrowColor ACCENTCOLOR
+skinparam sequenceParticipantBorderColor ACCENTCOLOR
+
+title M6 Search Engine - Query Processing Sequence
+
+actor User
+participant CLI
+participant QueryParser
+participant QueryProcessor
+participant SearchService
+participant TfIdf
+participant MetadataBoost
+participant IndexEntry
+database "M4 Store"
+
+User -> CLI: search("javascript async")
+activate CLI
+
+CLI -> QueryParser: parse(rawQuery)
+activate QueryParser
+QueryParser -> QueryParser: extractTokens()
+QueryParser -> QueryParser: findFilters()
+QueryParser --> CLI: ParsedQuery{terms, filters}
+deactivate QueryParser
+
+CLI -> QueryProcessor: process(parsedQuery)
+activate QueryProcessor
+QueryProcessor -> QueryProcessor: normalizeTerms()
+QueryProcessor -> QueryProcessor: generateVariations()
+QueryProcessor --> CLI: ProcessedQuery{normalized_terms, variations}
+deactivate QueryProcessor
+
+CLI -> SearchService: search(processedQuery, options)
+activate SearchService
+
+SearchService -> "M4 Store": getPostings("javascript", "async")
+activate "M4 Store"
+"M4 Store" --> SearchService: postings_list
+deactivate "M4 Store"
+
+SearchService -> SearchService: collectCandidateDocuments()
+note right of SearchService
+  Union all documents
+  that contain any of
+  the query terms
+end note
+
+loop For each Query Term
+  SearchService -> TfIdf: calculateTF(term, doc)
+  activate TfIdf
+  TfIdf --> SearchService: tf_value
+  deactivate TfIdf
+end
+
+loop For each Candidate Document
+  SearchService -> TfIdf: calculateIDF(term)
+  activate TfIdf
+  TfIdf -> "M4 Store": getDocumentFrequency(term)
+  activate "M4 Store"
+  "M4 Store" --> TfIdf: df
+  deactivate "M4 Store"
+  TfIdf --> SearchService: idf_value
+  deactivate TfIdf
+  
+  SearchService -> MetadataBoost: boost(document)
+  activate MetadataBoost
+  MetadataBoost -> MetadataBoost: checkLanguage()
+  MetadataBoost -> MetadataBoost: checkStars()
+  MetadataBoost -> MetadataBoost: checkTopics()
+  MetadataBoost --> SearchService: boost_factor
+  deactivate MetadataBoost
+  
+  SearchService -> SearchService: combinedScore = tf*idf*boost
+  note right of SearchService
+    Final score combines:
+    - TF-IDF (75%)
+    - Metadata (25%)
+  end note
+end
+
+SearchService -> SearchService: applyFilters()
+note right of SearchService
+  Filter by language,
+  owner, and other
+  user-specified criteria
+end note
+
+SearchService -> SearchService: sortByScore()
+SearchService -> SearchService: limitResults(topK)
+
+SearchService --> CLI: SearchResults[]
+deactivate SearchService
+
+CLI -> CLI: formatResults(results)
+CLI --> User: displayResults()
+deactivate CLI
+
+note over User, SearchService
+  Total latency for complex query: ~30ms
+  Including 1000+ documents
+end note
+
+@enduml

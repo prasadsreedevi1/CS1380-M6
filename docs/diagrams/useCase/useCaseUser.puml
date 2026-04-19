@@ -1,0 +1,73 @@
+@startuml M6-Use-Case-User
+
+' End user workflows: search, filter, view results
+' Shows what a typical user can do with the search engine
+' Primary actions: search repositories, apply filters, view details
+' Secondary actions: refine search, compare results, export
+
+!define BGCOLOR #F5F5F5
+skinparam backgroundColor BGCOLOR
+skinparam actorBorderColor #333
+skinparam usecaseBorderColor #333
+skinparam arrowColor #666
+skinparam shadowing false
+
+title M6 Search Engine - End User Use Cases
+
+actor "End User" as USER
+
+rectangle "M6 Search Engine" {
+  usecase "Search Repositories" as UC_SEARCH
+  usecase "Enter Search Query" as UC_QUERY
+  usecase "Filter by Language" as UC_FILTER_LANG
+  usecase "Filter by Owner" as UC_FILTER_OWNER
+  usecase "Filter by Topic" as UC_FILTER_TOPIC
+  usecase "View Result Details" as UC_VIEW_DETAILS
+  usecase "View Repository Readme" as UC_VIEW_README
+  usecase "View Star Count" as UC_VIEW_STARS
+  usecase "Sort Results\nby Relevance" as UC_SORT
+  usecase "Refine Search" as UC_REFINE
+  usecase "Export Results" as UC_EXPORT
+}
+
+USER --> UC_SEARCH
+UC_SEARCH --> UC_QUERY
+UC_SEARCH --> UC_FILTER_LANG
+UC_SEARCH --> UC_FILTER_OWNER
+UC_SEARCH --> UC_FILTER_TOPIC
+UC_SEARCH --> UC_SORT
+
+UC_SEARCH --> UC_VIEW_DETAILS
+UC_VIEW_DETAILS --> UC_VIEW_README
+UC_VIEW_DETAILS --> UC_VIEW_STARS
+
+UC_SEARCH --> UC_REFINE
+UC_REFINE --> UC_SEARCH
+
+UC_VIEW_DETAILS --> UC_EXPORT
+
+note right of UC_QUERY
+  Type keywords:
+  "javascript async"
+  "python machine learning"
+end note
+
+note right of UC_FILTER_LANG
+  Filter by programming
+  language: Python, JavaScript,
+  Java, Go, Rust, etc.
+end note
+
+note right of UC_SORT
+  Results ranked by:
+  TF-IDF score (75%)
+  + metadata boosts (25%)
+  = relevance ranking
+end note
+
+note right of UC_EXPORT
+  Save results as:
+  JSON, CSV for further analysis
+end note
+
+@enduml

@@ -1,0 +1,46 @@
+@startuml M6-Data-Flow-Diagram
+
+' Detailed data flow during indexing phase: raw repos -> extracted text -> tokens -> stemmed terms -> TF/DF calculation -> inverted index
+' Shows all text processing steps: extract, normalize, tokenize, stem, n-grams
+' Each step persists intermediate results and feeds into ranking calculations (TF-IDF, IDF weights)
+' Final output: M4 distributed store persists inverted index, TF/DF stats, and IDF weights for search queries
+
+!define BGCOLOR #F5F5F5
+!define ACCENTCOLOR #1F77B4
+!define ACCENTCOLOR2 #2CA02C
+!define ACCENTCOLOR3 #FF7F0E
+
+skinparam backgroundColor BGCOLOR
+skinparam activityBackgroundColor #E8F4F8
+skinparam activityBorderColor ACCENTCOLOR
+skinparam activityFontColor #333
+skinparam arrowColor #333
+
+title M6 Search Engine - Data Flow Diagram (Indexing Phase)
+
+(*) --> [Raw repository docs] activity RAW as "Raw Data\n{owner, repo, stars}"
+
+RAW --> activity EXT as "Extract README\nMarkdown -> Text"
+
+EXT --> activity NORM as "Normalize\nLowercase, Remove Punctuation"
+
+NORM --> activity TOKEN as "Tokenize\nSplit into Words"
+
+TOKEN --> activity STEM as "Stem\nPorter Stemmer"
+
+STEM --> activity NGRAM as "Generate N-Grams\n1-gram, 2-gram, 3-gram"
+
+NGRAM --> activity TF as "Calculate TF\nTerm Frequency per Doc"
+
+TF --> activity DF as "Calculate DF\nDoc Frequency"
+
+STEM --> activity IDX as "Build Inverted Index\nterm -> [docId, tf, ...]"
+
+DF --> activity IDF as "Calculate IDF\nlog(N / df)"
+
+TF --> IDX
+IDX --> activity STORE as "M4 Store Writer\nSerialize -> Distribute"
+
+IDF --> STORE
+
+STORE --> [M4 Distributed Store\nIndex, TF, DF, IDF] (*)

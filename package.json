@@ -1,0 +1,23 @@
+{
+  "name": "cs1380-m6-search-engine",
+  "version": "0.1.0",
+  "description": "M6: Distributed search engine for GitHub README files",
+  "main": "distribution.js",
+  "directories": {
+    "src": "src"
+  },
+  "scripts": {
+    "start": "node distribution.js",
+    "auto": "node autoRun.js",
+    "crawl": "node src/cli/crawl-cli.js",
+    "index": "node src/cli/index-cli.js",
+    "search": "node src/cli/search-cli.js"
+  },
+  "dependencies": {
+    "@brown-ds/distribution": "^0.2.32",
+    "natural": "^6.7.0",
+    "html-to-text": "^9.0.5",
+    "node-fetch": "^2.7.0",
+    "yargs": "^17.7.2"
+  }
+}
