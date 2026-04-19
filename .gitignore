@@ -11,3 +11,9 @@ build/
 coverage/
 .nyc_output/
 *.tmp
+store/
+benchmarks-*.json
+benchmark-results.json
+evaluation-report.json
+performance-metrics.json
+scalability-results.json

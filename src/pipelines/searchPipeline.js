@@ -28,11 +28,40 @@ function getMetadataBoost(metadata) {
 
 function getIndexStats(store, callback) {
   const key = storageKeys.indexStatsKey();
-  store.get({key, gid: 'gitgle'}, (err, stats) => {
+  store.get({key}, (err, stats) => {
     if (err) {
-      return callback(null, {docsIndexed: 0, uniqueTerms: 0});
+      return callback(null, {docsIndexed: 0, uniqueTerms: 0, indexedTerms: []});
     }
-    callback(null, stats || {docsIndexed: 0, uniqueTerms: 0});
+    callback(null, stats || {docsIndexed: 0, uniqueTerms: 0, indexedTerms: []});
+  });
+}
+
+function getIndexedTerms(store, callback) {
+  const key = storageKeys.indexStatsKey();
+  store.get({key}, (err, stats) => {
+    if (!err && stats && stats.indexedTerms && Array.isArray(stats.indexedTerms)) {
+      return callback(null, stats.indexedTerms);
+    }
+    
+    const terms = [];
+    const prefix = 'idx:';
+    
+    store.get(null, (err, allKeys) => {
+      if (err || !allKeys) {
+        return callback(null, []);
+      }
+      
+      const indexKeys = allKeys.filter(k => typeof k === 'string' && k.startsWith(prefix));
+      
+      indexKeys.forEach(key => {
+        const term = key.substring(prefix.length);
+        if (term.length > 0) {
+          terms.push(term);
+        }
+      });
+      
+      callback(null, terms);
+    });
   });
 }
 
@@ -87,7 +116,7 @@ function executeSearch(queryString, options, runtime, callback) {
             const boost = getMetadataBoost(metadata);
             const finalScore = tfidfScore * boost;
             
-            results.push({
+            const resultObj = {
               owner: metadata.owner || owner,
               repo: metadata.repo || repo,
               url: metadata.url || `https://github.com/${owner}/${repo}`,
@@ -98,8 +127,11 @@ function executeSearch(queryString, options, runtime, callback) {
               score: finalScore,
               matchedTerms: [queryTerm],
               termFrequency: termFreq,
-              matchCount: 1
-            });
+              matchCount: 1,
+              content: metadata.content || metadata.readme || '' // For snippet extraction
+            };
+            
+            results.push(resultObj);
           }
           completed++;
 
@@ -128,11 +160,23 @@ function executeSearch(queryString, options, runtime, callback) {
       });
 
       if (docIds.length === 0) {
-        callback(null, {
-          query: queryString,
-          results: [],
-          total: 0,
+        getIndexedTerms(store, (err, indexedTerms) => {
+          if (err || !indexedTerms || indexedTerms.length === 0) {
+            return callback(null, {
+              query: queryString,
+              results: [],
+              total: 0,
+            });
+          }
+          
+          
+          callback(null, {
+            query: queryString,
+            results: [],
+            total: 0,
+          });
         });
+        return;
       }
     });
   });
@@ -141,6 +185,7 @@ function executeSearch(queryString, options, runtime, callback) {
 module.exports = {
   executeSearch,
   getIndexStats,
+  getIndexedTerms,
   calculateTFIDF,
   getMetadataBoost,
 };

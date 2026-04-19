@@ -54,13 +54,17 @@ function showReadyScreen() {
 
 const distribution = require('./distribution.js')({ip: '127.0.0.1', port: 3000});
 
-distribution.node.start(() => {
-  console.log(`${colors.green}`);
+distribution.node.start((err) => {
+  if (err) {
+    console.error(`${colors.yellow}[Warning] Distribution startup: ${err.message}${colors.reset}`);
+  }
+  
+  console.log(`${colors.green}Initializing GitGle...${colors.reset}`);
   
   ensureGitgleGroup((err) => {
     if (err) {
-      console.error('✗ Failed to initialize:', err.message);
-      process.exit(1);
+      console.error(`${colors.yellow}[Warning] Group initialization: ${err.message}${colors.reset}`);
+      console.log(`${colors.cyan}Continuing with local-only mode...${colors.reset}\n`);
     }
 
     runPipeline();
@@ -68,31 +72,35 @@ distribution.node.start(() => {
 
   function runPipeline() {
     const runtime = {
-      store: distribution.gitgle.store,
-      executor: distribution.gitgle.mr,
+      store: distribution.gitgle && distribution.gitgle.store ? distribution.gitgle.store : null,
+      executor: distribution.gitgle && distribution.gitgle.mr ? distribution.gitgle.mr : null,
     };
 
     showLoadingScreen();
     
-    // CRAWL PHASE
-    const crawlOptions = {seedFile: 'data/seeds/github-repos.txt'};
+    startInteractiveSearch(runtime);
     
-    runCrawl(crawlOptions, runtime, (err, crawlStats) => {
-      if (err) {
-        process.exit(1);
-      }
-
-      // INDEX PHASE
+    if (runtime.store && runtime.executor) {
+      const crawlOptions = {seedFile: 'data/seeds/github-repos.txt'};
       
-      runIndex({}, runtime, (err, indexStats) => {
+      runCrawl(crawlOptions, runtime, (err, crawlStats) => {
         if (err) {
-          process.exit(1);
+          console.error(`${colors.yellow}[Background] Crawl error: ${err.message}${colors.reset}`);
+          return;
         }
+        console.log(`${colors.green}[Background] Crawl complete${colors.reset}`);
 
-        showReadyScreen();
-        startInteractiveSearch(runtime);
+        runIndex({}, runtime, (err, indexStats) => {
+          if (err) {
+            console.error(`${colors.yellow}[Background] Index error: ${err.message}${colors.reset}`);
+            return;
+          }
+          console.log(`${colors.green}[Background] Indexing complete${colors.reset}`);
+        });
       });
-    });
+    } else {
+      console.log(`${colors.yellow}[Note] Background crawl/index skipped (no runtime support)${colors.reset}\n`);
+    }
   }
 
   /**
