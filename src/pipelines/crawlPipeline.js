@@ -1,28 +1,8 @@
-// downloads repos from github
-// takes a seed list, fetches readmes and metadata, stores everything in the db
-// uses mapreduce to split the work across nodes so it goes faster and can scale to more repos
 const seedLoader = require('../services/seedLoader.js');
-const githubApi = require('../services/githubApi.js');
 const storageKeys = require('../services/storageKeys.js');
 const demoRepositories = require('../data/demoRepositories.js');
-
-function repoRecordForSeed(seed, demoList) {
-  const hit = demoList.find(
-    (r) => r.owner === seed.owner && r.repo === seed.repo,
-  );
-  if (hit) {
-    return hit;
-  }
-  return {
-    owner: seed.owner,
-    repo: seed.repo,
-    url: `https://github.com/${seed.owner}/${seed.repo}`,
-    description: `${seed.repo} repository from ${seed.owner}`,
-    language: 'Mixed',
-    stars: 0,
-    readme: `${seed.owner}/${seed.repo} - open source repository.`,
-  };
-}
+const { fetchRepoData } = require('./repoDataFetcher.js');
+const { runRecursiveCrawl } = require('./recursiveCrawl.js');
 
 function runCrawl(options, runtime, callback) {
   if (!callback) {
@@ -42,6 +22,8 @@ function runCrawl(options, runtime, callback) {
     successful: 0,
     failed: 0,
     totalBytes: 0,
+    apiCalls: 0,
+    apiErrors: 0,
   };
 
   seedLoader.loadSeeds(options.seedFile, (err, seeds) => {
@@ -52,21 +34,40 @@ function runCrawl(options, runtime, callback) {
       return callback(new Error('No seeds found in seed file'));
     }
 
-    const repos = seeds.map((s) => repoRecordForSeed(s, demoRepositories));
+    const repos = [];
+    let fetched = 0;
+    let fetchErrors = 0;
 
-    runCrawlJob(store, mr, jobId, options, repos, (err, stats) => {
-      if (err) {
-        return callback(err, {
-          ...crawlStats,
-          error: err.message,
+    seeds.forEach((seed, index) => {
+      setTimeout(() => {
+        fetchRepoData(seed, demoRepositories, (err, repoData) => {
+          if (err) {
+            fetchErrors++;
+          }
+          if (repoData) {
+            repos.push(repoData);
+            crawlStats.apiCalls++;
+          }
+          fetched++;
+          if (fetched === seeds.length) {
+            crawlStats.apiErrors = fetchErrors;
+            runCrawlJob(store, mr, jobId, options, repos, (err, stats) => {
+              if (err) {
+                return callback(err, {
+                  ...crawlStats,
+                  error: err.message,
+                });
+              }
+
+              crawlStats = {...crawlStats, ...stats};
+              crawlStats.endTime = Date.now();
+              crawlStats.duration = crawlStats.endTime - crawlStats.startTime;
+
+              callback(null, crawlStats);
+            });
+          }
         });
-      }
-
-      crawlStats = {...crawlStats, ...stats};
-      crawlStats.endTime = Date.now();
-      crawlStats.duration = crawlStats.endTime - crawlStats.startTime;
-
-      callback(null, crawlStats);
+      }, index * 100);
     });
   });
 }
@@ -91,17 +92,16 @@ function runCrawlJob(store, mr, jobId, options, repos, callback) {
       return callback(new Error('No repositories to crawl'));
     }
 
-    // Use the distributed group store so each key lands on the same node that
-    // store.get / mr.exec will hash to. (Round-robin comm.send to workers breaks that.)
     const keys = [];
     let completed = 0;
+    let storeErrors = 0;
 
     function tryFinishMapReduce() {
       if (completed < repos.length) {
         return;
       }
       if (keys.length === 0) {
-        return callback(new Error('No repos stored'));
+        return callback(new Error('No repos stored successfully'));
       }
 
       mr.exec({
@@ -128,6 +128,7 @@ function runCrawlJob(store, mr, jobId, options, repos, callback) {
         stats.totalBytes = results
           ? results.reduce((sum, r) => sum + JSON.stringify(r).length, 0)
           : 0;
+        stats.failed = storeErrors;
 
         callback(null, stats);
       });
@@ -138,15 +139,20 @@ function runCrawlJob(store, mr, jobId, options, repos, callback) {
       const data = {
         owner: repo.owner,
         repo: repo.repo,
-        url: repo.url,
-        description: repo.description,
-        language: repo.language,
-        stars: repo.stars,
+        url: repo.url || `https://github.com/${repo.owner}/${repo.repo}`,
+        description: repo.description || '',
+        language: repo.language || 'Unknown',
+        stars: repo.stars || 0,
+        topics: repo.topics || [],
         readme: repo.readme || '',
       };
 
       store.put(data, {key: metaKey, gid: 'gitgle'}, (err) => {
-        if (!err) keys.push(metaKey);
+        if (err) {
+          storeErrors++;
+        } else {
+          keys.push(metaKey);
+        }
         completed++;
         tryFinishMapReduce();
       });
@@ -154,7 +160,9 @@ function runCrawlJob(store, mr, jobId, options, repos, callback) {
   });
 }
 
+
 module.exports = {
   runCrawl,
   runCrawlJob,
+  runRecursiveCrawl,
 };

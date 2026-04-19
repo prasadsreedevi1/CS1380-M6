@@ -39,6 +39,7 @@ function runIndex(options, runtime, callback) {
     }
 
     mr.exec({
+      gid: 'gitgle',
       keys: docKeys,
 
       map: function(key, repoData) {
