@@ -48,6 +48,11 @@ function parseSearchArgs(args) {
         type: 'boolean',
         default: false,
       })
+      .option('demo', {
+        describe: 'Load in-memory demo data instead of the gitgle index',
+        type: 'boolean',
+        default: false,
+      })
       .argv;
 
   return {
@@ -59,6 +64,7 @@ function parseSearchArgs(args) {
     explain: argv.explain,
     json: argv.json,
     csv: argv.csv,
+    demo: argv.demo,
   };
 }
 

@@ -9,50 +9,8 @@
  * @typedef {StoreConfig | string | null} SimpleConfig
  */
 
-/* Notes/Tips:
-
-- Use absolute paths to make sure they are agnostic to where your code is running from!
-  Use the `path` module for that.
-*/
-
 const fs = require('fs');
 const path = require('path');
-const id = require('../util/id.js');
-
-const localStorePath = path.join(process.cwd(), 'store');
-/**
- * @param {string} key
- * @returns {string}
- */
-function normalizeKey(key) {
-  return key.replace(/[^a-zA-Z0-9]/g, '');
-}
-
-/**
- * @param {any} state
- * @param {SimpleConfig} configuration
- * @returns {string | null}
- */
-function getKeyFromConfig(state, configuration) {
-  if (typeof configuration === 'string') {
-    return configuration;
-  } else if (configuration === null) {
-    return id.getID(state);
-  }
-  return /** @type {StoreConfig} */ (configuration).key;
-}
-
-/**
- * @param {string} data
- * @returns {{error: Error | null, value: any}}
- */
-function safeParse(data) {
-  try {
-    return {error: null, value: JSON.parse(data)};
-  } catch (e) {
-    return {error: e, value: null};
-  }
-}
 
 /**
  * @param {any} state
@@ -60,25 +18,27 @@ function safeParse(data) {
  * @param {Callback} callback
  */
 function put(state, configuration, callback) {
-  const key = getKeyFromConfig(state, configuration);
-  let gid = 'default';
-  if (configuration && typeof configuration === 'object' && configuration.gid) {
-    gid = configuration.gid;
+  const nid = globalThis.distribution.util.id.getNID(globalThis.distribution.node.config);
+  let key;
+  let gid = 'local';
+
+  if (typeof configuration === 'string') {
+    key = configuration;
+  } else if (configuration === null) {
+    key = globalThis.distribution.util.id.getID(state);
+  } else {
+    key = configuration.key;
+    gid = configuration.gid || 'local';
   }
-  const sanitized = normalizeKey(key) + '_' + gid;
-  const filePath = path.join(localStorePath, sanitized + '.json');
 
-  if (!fs.existsSync(localStorePath)) {
-    fs.mkdirSync(localStorePath, { recursive: true });
-  }
+  const storeDir = path.join(process.cwd(), 'store', nid, gid);
+  fs.mkdirSync(storeDir, { recursive: true });
+  const filename = key.replace(/[^a-zA-Z0-9]/g, '');
+  const filepath = path.join(storeDir, filename);
+  const serialized = globalThis.distribution.util.serialize(state);
+  fs.writeFileSync(filepath, serialized);
 
-  console.log(`[Store] Writing to file: ${filePath} with data:`, state);
-
-  fs.writeFile(filePath, JSON.stringify(state), (err) => {
-    if (err) 
-      return callback(err);
-    return callback(null, state);
-  });
+  callback(null, state);
 }
 
 /**
@@ -86,43 +46,46 @@ function put(state, configuration, callback) {
  * @param {Callback} callback
  */
 function get(configuration, callback) {
-  if (configuration === null) {
-    const dir = localStorePath;
-    const fs_inner = require('fs');
-    fs_inner.readdir(dir, (err, files) => {
-      if (err) 
-        return callback(err);
+  const nid = globalThis.distribution.util.id.getNID(globalThis.distribution.node.config);
+  let key;
+  let gid = 'local';
 
-      const keys = files.map((f) => {
-        const baseFileName = f.replace('.json', '');
-        const parts = baseFileName.split('_');
-        if (parts.length > 1) {
-          parts.pop();
-          return parts.join('_');
-        }
-        return baseFileName;
-      });
-      return callback(null, keys);
+  if (typeof configuration === 'string') {
+    key = configuration;
+  } else if (configuration === null) {
+    const dir = path.join(process.cwd(), 'store', nid, gid);
+    fs.readdir(dir, (err, files) => {
+      if (err) return callback(err, null);
+      return callback(null, files);
     });
     return;
+  } else {
+    key = configuration.key;
+    gid = configuration.gid || 'local';
+
+    if (key == null) {
+      const dir = path.join(process.cwd(), 'store', nid, gid);
+      if (!fs.existsSync(dir)) return callback(null, []);
+      fs.readdir(dir, (err, files) => {
+        if (err) return callback(err, null);
+        return callback(null, files);
+      });
+      return;
+    }
   }
 
-  const key = getKeyFromConfig(null, configuration);
-  let gid = 'default';
-  if (configuration && typeof configuration === 'object' && configuration.gid) {
-    gid = configuration.gid;
-  }
-  const sanitized = normalizeKey(key) + '_' + gid;
-  const filePath = path.join(localStorePath, sanitized + '.json');
+  const storeDir = path.join(process.cwd(), 'store', nid, gid);
+  const filename = key.replace(/[^a-zA-Z0-9]/g, '');
+  const filepath = path.join(storeDir, filename);
 
-  fs.readFile(filePath, 'utf8', (err, data) => {
-    if (err) 
-      return callback(new Error(err.message));
-    const {error, value} = safeParse(data);
-    if (error) 
-      return callback(error);
-    return callback(null, value);
-  });
+  if (!fs.existsSync(filepath)) {
+    return callback(new Error('File not found'), null);
+  }
+
+  const state = fs.readFileSync(filepath, 'utf8');
+  const dState = globalThis.distribution.util.deserialize(state);
+
+  return callback(null, dState);
 }
 
 /**
@@ -130,26 +93,32 @@ function get(configuration, callback) {
  * @param {Callback} callback
  */
 function del(configuration, callback) {
-  const key = getKeyFromConfig(null, configuration);
-  let gid = 'default';
-  if (configuration && typeof configuration === 'object' && configuration.gid) {
-    gid = configuration.gid;
-  }
-  const sanitized = normalizeKey(key) + '_' + gid;
-  const filePath = path.join(localStorePath, sanitized + '.json');
+  const nid = globalThis.distribution.util.id.getNID(globalThis.distribution.node.config);
+  let key;
+  let gid = 'local';
 
-  fs.readFile(filePath, 'utf8', (err, data) => {
-    if (err) 
-      return callback(new Error(err.message));
-    const {error, value} = safeParse(data);
-    if (error) 
-      return callback(error);
-    fs.unlink(filePath, (unlinkErr) => {
-      if (unlinkErr) 
-        return callback(new Error(unlinkErr.message));
-      return callback(null, value);
-    });
-  });
+  if (typeof configuration === 'string') {
+    key = configuration;
+  } else if (configuration === null) {
+    return callback(new Error('cannot look up a null item'), null);
+  } else {
+    key = configuration.key;
+    gid = configuration.gid || 'local';
+  }
+
+  const storeDir = path.join(process.cwd(), 'store', nid, gid);
+  const filename = key.replace(/[^a-zA-Z0-9]/g, '');
+  const filepath = path.join(storeDir, filename);
+
+  if (!fs.existsSync(filepath)) {
+    return callback(new Error('File not found'), null);
+  }
+
+  const state = fs.readFileSync(filepath, 'utf8');
+  const dState = globalThis.distribution.util.deserialize(state);
+
+  fs.unlinkSync(filepath);
+  return callback(null, dState);
 }
 
 /**
@@ -158,38 +127,40 @@ function del(configuration, callback) {
  * @param {Callback} callback
  */
 function append(state, configuration, callback) {
-  const key = getKeyFromConfig(state, configuration);
-  let gid = 'default';
-  if (configuration && typeof configuration === 'object' && configuration.gid) {
-    gid = configuration.gid;
+  const nid = globalThis.distribution.util.id.getNID(globalThis.distribution.node.config);
+  let key;
+  let gid = 'local';
+
+  if (typeof configuration === 'string') {
+    key = configuration;
+  } else if (configuration === null) {
+    key = globalThis.distribution.util.id.getID(state);
+  } else {
+    key = configuration.key;
+    gid = configuration.gid || 'local';
   }
-  const sanitized = normalizeKey(key) + '_' + gid;
-  const filePath = path.join(localStorePath, sanitized + '.json');
 
-  try {
-    let array = [];
+  const storeDir = path.join(process.cwd(), 'store', nid, gid);
+  fs.mkdirSync(storeDir, { recursive: true });
+  const filename = key.replace(/[^a-zA-Z0-9]/g, '');
+  const filepath = path.join(storeDir, filename);
 
-    try {
-      const data = fs.readFileSync(filePath, 'utf8');
-      const {error, value} = safeParse(data);
-      if (!error) {
-        if (Array.isArray(value)) {
-          array = value;
-        } else {
-          array = [value];
-        }
-      }
-    } catch (readErr) {
-      array = [];
+  let existing = [];
+  if (fs.existsSync(filepath)) {
+    const raw = fs.readFileSync(filepath, 'utf8');
+    const parsed = globalThis.distribution.util.deserialize(raw);
+    if (Array.isArray(parsed)) {
+      existing = parsed;
+    } else {
+      existing = [parsed];
     }
-
-    array.push(state);
-
-    fs.writeFileSync(filePath, JSON.stringify(array));
-    return callback(null, array);
-  } catch (err) {
-    return callback(new Error(err.message));
   }
+
+  existing.push(state);
+  const serialized = globalThis.distribution.util.serialize(existing);
+  fs.writeFileSync(filepath, serialized);
+
+  callback(null, existing);
 }
 
 /**
@@ -210,4 +181,3 @@ function reconf(newGroup, oldGroup, callback) {
 }
 
 module.exports = {put, get, del, append, reconf};
-

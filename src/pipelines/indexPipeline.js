@@ -3,7 +3,6 @@
 // this creates the data structure that lets us search fast
 
 const storageKeys = require('../services/storageKeys.js');
-const tfidf = require('../search/ranking/tfidf.js');
 
 function runIndex(options, runtime, callback) {
   if (!callback) {
@@ -12,8 +11,8 @@ function runIndex(options, runtime, callback) {
   }
 
   const jobId = `index-${Date.now()}`;
-  const store = runtime.store;
-  const executor = runtime.executor;
+  const store = runtime.store || globalThis.distribution.gitgle.store;
+  const mr = runtime.executor || globalThis.distribution.gitgle.mr;
 
   let indexStats = {
     jobId,
@@ -24,138 +23,130 @@ function runIndex(options, runtime, callback) {
     totalBytes: 0,
   };
 
-  // run MapReduce job to extract terms from all documents
-  runTermExtractionJob(store, executor, jobId, (err, terms) => {
+  store.get(null, (err, keys) => {
     if (err) return callback(err);
 
-    // run MapReduce to compute DF and invert index
-    runInversionJob(store, executor, jobId, terms, (err, inversionStats) => {
+    if (!keys || keys.length === 0) {
+      return callback(new Error('No documents found in store — run crawl first'));
+    }
+
+    const docKeys = keys.filter(
+      (k) => typeof k === 'string' && k.startsWith('meta'),
+    );
+
+    if (docKeys.length === 0) {
+      return callback(new Error('No metadata keys found — run crawl first'));
+    }
+
+    mr.exec({
+      keys: docKeys,
+
+      map: function(key, repoData) {
+        if (!repoData || !repoData.readme) return [];
+
+        const results = [];
+        const text = repoData.readme.toLowerCase();
+        const docId = `${repoData.owner}/${repoData.repo}`;
+
+        const tokens = text
+          .split(/\W+/)
+          .filter(t => t.length > 2);
+
+        const termFreqs = {};
+        tokens.forEach(token => {
+          termFreqs[token] = (termFreqs[token] || 0) + 1;
+        });
+
+        Object.entries(termFreqs).forEach(([term, freq]) => {
+          const result = {};
+          result[term] = { docId, freq };
+          results.push(result);
+        });
+
+        return results;
+      },
+
+      reduce: function(term, postingsList) {
+        if (!postingsList || postingsList.length === 0) return null;
+
+        const postings = {};
+        postingsList.forEach(entry => {
+          if (entry && entry.docId) {
+            postings[entry.docId] = (postings[entry.docId] || 0) + entry.freq;
+          }
+        });
+
+        const entry = {
+          term,
+          postings,
+          documentFrequency: Object.keys(postings).length,
+        };
+
+        const result = {};
+        result[term] = entry;
+        return result;
+      },
+
+    }, (err, results) => {
       if (err) return callback(err);
 
-      indexStats = {...indexStats, ...inversionStats};
+      indexStats.docsIndexed = docKeys.length;
+      indexStats.uniqueTerms = results ? results.length : 0;
+      indexStats.totalPostings = results
+        ? results.reduce((sum, r) => {
+            const entry = r ? Object.values(r)[0] : null;
+            return sum + (entry ? Object.keys(entry.postings || {}).length : 0);
+          }, 0)
+        : 0;
 
-      // compute statistics and store
-      storeIndexStats(store, jobId, indexStats, (err) => {
-        if (err) return callback(err);
+      writeInvertedIndexEntries(store, results, (writeErr) => {
+        if (writeErr) return callback(writeErr);
 
-        indexStats.endTime = Date.now();
-        indexStats.duration = indexStats.endTime - indexStats.startTime;
+        storeIndexStats(store, jobId, indexStats, (statsErr) => {
+          if (statsErr) return callback(statsErr);
 
-        callback(null, indexStats);
+          indexStats.endTime = Date.now();
+          indexStats.duration = indexStats.endTime - indexStats.startTime;
+
+          callback(null, indexStats);
+        });
       });
     });
   });
 }
 
-function runTermExtractionJob(store, executor, jobId, callback) {
-  const documentProcessor = require('../search/indexing/documentProcessor.js');
-  const parseAndNormalize = require('../search/parsing/normalizeText.js').normalizeText;
-  const tokenize = require('../search/parsing/tokenize.js').tokenize;
-  const stem = require('../search/parsing/stem.js').stem;
+function writeInvertedIndexEntries(store, mrResults, callback) {
+  const rows = (mrResults || []).filter(Boolean);
+  if (rows.length === 0) {
+    return callback(null);
+  }
 
-  // MapReduce job for term extraction
-  const termExtractionJob = {
-    name: `term-extraction-${jobId}`,
-    map: function(docKey, docValue, output) {
-      // Map: process document and emit terms
-      if (!docValue || !docValue.readme) {
-        return;
-      }
+  let pending = rows.length;
+  let firstErr = null;
 
-      try {
-        const normalized = parseAndNormalize(docValue.readme);
-        const tokens = tokenize(normalized);
-        const stemmed = tokens.map(t => stem(t));
+  rows.forEach((row) => {
+    const term = Object.keys(row)[0];
+    const entry = row[term];
+    if (!term || !entry) {
+      pending--;
+      if (pending === 0) callback(firstErr);
+      return;
+    }
 
-        stemmed.forEach(term => {
-          output.emit(term, {
-            term,
-            docId: `${docValue.owner}/${docValue.repo}`,
-            owner: docValue.owner,
-            repo: docValue.repo,
-          });
-        });
-      } catch (err) {
-      }
-    },
-
-    reduce: function(term, docListings, output) {
-      // reduce: Collect all documents containing a term
-      const docIds = {};
-      const termFrequencies = {};
-
-      docListings.forEach(listing => {
-        if (!docIds[listing.docId]) {
-          docIds[listing.docId] = listing;
-          termFrequencies[listing.docId] = 0;
-        }
-        termFrequencies[listing.docId]++;
-      });
-
-      output.emit('entry', {
-        term,
-        documentFrequency: Object.keys(docIds).length,
-        docIds: Object.keys(docIds),
-        termFrequencies,
-      });
-    },
-  };
-
-  let termCount = 0;
-  callback(null, {});
-}
-
-function runInversionJob(store, executor, jobId, terms, callback) {
-  const inversionJob = {
-    name: `inversion-${jobId}`,
-    map: function(termKey, termEntry, output) {
-      const storageKeys = require('../services/storageKeys.js');
-
-      output.emit('term', {
-        term: termEntry.term,
-        postings: termEntry.termFrequencies || {},
-        documentFrequency: termEntry.documentFrequency,
-      });
-    },
-
-    reduce: function(termKey, entries, output) {
-      const storageKeys = require('../../services/storageKeys.js');
-
-      entries.forEach(entry => {
-        const invKey = storageKeys.invertedIndexKey(entry.term);
-        this.store.put(invKey, entry, (err) => {
-          if (!err) {
-            output.emit('indexed', {term: entry.term});
-          }
-        });
-
-        // store document frequency
-        const dfKey = storageKeys.documentFrequencyKey(entry.term);
-        this.store.put(dfKey, entry.documentFrequency, (err) => {
-          if (!err) {
-            output.emit('df-stored', {term: entry.term});
-          }
-        });
-      });
-    },
-  };
-
-  let stats = {
-    docsIndexed: 0,
-    uniqueTerms: 0,
-    totalPostings: 0,
-  };
-
-  callback(null, stats);
+    const invKey = storageKeys.invertedIndexKey(term);
+    store.put(entry, {key: invKey, gid: 'gitgle'}, (err) => {
+      if (err) firstErr = firstErr || err;
+      pending--;
+      if (pending === 0) callback(firstErr);
+    });
+  });
 }
 
 function storeIndexStats(store, jobId, stats, callback) {
   const key = storageKeys.indexStatsKey();
 
-  store.get(key, (err, existing) => {
-    const indexStats = existing || {
-      indices: {},
-    };
+  store.get({key, gid: 'gitgle'}, (err, existing) => {
+    const indexStats = existing || { indices: {} };
 
     indexStats.indices[jobId] = {
       docsIndexed: stats.docsIndexed || 0,
@@ -164,35 +155,15 @@ function storeIndexStats(store, jobId, stats, callback) {
       createdAt: Date.now(),
     };
 
-    store.put(key, indexStats, callback);
-  });
-}
+    indexStats.docsIndexed = stats.docsIndexed || 0;
+    indexStats.uniqueTerms = stats.uniqueTerms || 0;
+    indexStats.totalPostings = stats.totalPostings || 0;
 
-function mergeIndices(store, jobIds, callback) {
-  let mergedStats = {
-    docsIndexed: 0,
-    uniqueTerms: 0,
-    totalPostings: 0,
-    mergedJobIds: jobIds,
-  };
-
-  let completed = 0;
-  let allTerms = new Set();
-
-  jobIds.forEach(jobId => {
-    completed++;
-
-    if (completed === jobIds.length) {
-      mergedStats.uniqueTerms = allTerms.size;
-      callback(null, mergedStats);
-    }
+    store.put(indexStats, {key, gid: 'gitgle'}, callback);
   });
 }
 
 module.exports = {
   runIndex,
-  runTermExtractionJob,
-  runInversionJob,
   storeIndexStats,
-  mergeIndices,
 };

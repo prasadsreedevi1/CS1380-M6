@@ -80,11 +80,16 @@ function loadRepositoriesFromSeed() {
   seedContent.split('\n').forEach(line => {
     const trimmed = line.trim();
     if (trimmed && !trimmed.startsWith('#')) {
-      const [owner, repo] = trimmed.split('/');
+      const idx = trimmed.indexOf('/');
+      if (idx === -1) {
+        return;
+      }
+      const owner = trimmed.slice(0, idx).trim();
+      const repo = trimmed.slice(idx + 1).trim();
       if (owner && repo) {
         repositories.push({
-          owner: owner.trim(),
-          repo: repo.trim(),
+          owner,
+          repo,
           url: `https://github.com/${owner.trim()}/${repo.trim()}`,
           description: `${repo} repository from ${owner}`,
           language: 'Mixed',

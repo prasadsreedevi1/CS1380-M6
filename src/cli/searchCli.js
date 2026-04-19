@@ -2,6 +2,7 @@
 
 const {parseSearchArgs, printSearchResults, printJson, printError} = require('./cliHelpers.js');
 const {executeSearch} = require('../pipelines/searchPipeline.js');
+const {ensureGitgleGroup} = require('../runtime/ensureGitgleGroup.js');
 const storageKeys = require('../services/storageKeys.js');
 const demoRepositories = require('../data/demoRepositories.js');
 
@@ -195,9 +196,29 @@ function populateDemoData(store) {
 async function main() {
   try {
     const options = parseSearchArgs(process.argv.slice(2));
-    const runtime = global.runtime || require('../../distribution.js')();
+    const distribution = require('../../distribution.js')();
 
-    populateDemoData(runtime.store);
+    await new Promise((resolve, reject) => {
+      distribution.node.start((err) => (err ? reject(err) : resolve()));
+    });
+
+    await new Promise((resolve, reject) => {
+      ensureGitgleGroup((err) => (err ? reject(err) : resolve()));
+    });
+
+    const runtime =
+      global.runtime && global.runtime.store
+        ? global.runtime
+        : {
+            store: distribution.gitgle.store,
+            executor: distribution.gitgle.mr,
+            group: distribution.gitgle,
+          };
+
+    if (options.demo) {
+      populateDemoData(distribution.store);
+      runtime.store = distribution.store;
+    }
 
     if (options.query) {
       runSingleSearch(options, runtime);
