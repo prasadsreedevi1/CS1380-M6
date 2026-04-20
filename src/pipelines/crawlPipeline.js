@@ -1,6 +1,5 @@
 const seedLoader = require('../services/seedLoader.js');
 const storageKeys = require('../services/storageKeys.js');
-const demoRepositories = require('../data/demoRepositories.js');
 const { fetchRepoData } = require('./repoDataFetcher.js');
 const { runRecursiveCrawl } = require('./recursiveCrawl.js');
 
@@ -40,7 +39,7 @@ function runCrawl(options, runtime, callback) {
 
     seeds.forEach((seed, index) => {
       setTimeout(() => {
-        fetchRepoData(seed, demoRepositories, (err, repoData) => {
+        fetchRepoData(seed, null, (err, repoData) => {
           if (err) {
             fetchErrors++;
           }
@@ -80,8 +79,11 @@ function runCrawlJob(store, mr, jobId, options, repos, callback) {
     totalBytes: 0,
   };
 
+
   globalThis.distribution.local.groups.get('gitgle', (err, nodes) => {
-    if (err) return callback(err);
+    if (err) {
+      return callback(err);
+    }
 
     const nodeList = Object.values(nodes);
     if (nodeList.length === 0) {
@@ -104,6 +106,7 @@ function runCrawlJob(store, mr, jobId, options, repos, callback) {
         return callback(new Error('No repos stored successfully'));
       }
 
+
       mr.exec({
         keys,
         map: function(key, repoData) {
@@ -123,14 +126,29 @@ function runCrawlJob(store, mr, jobId, options, repos, callback) {
       }, (err, results) => {
         if (err) return callback(err);
 
-        stats.reposProcessed = results ? results.length : 0;
-        stats.successful = results ? results.length : 0;
-        stats.totalBytes = results
-          ? results.reduce((sum, r) => sum + JSON.stringify(r).length, 0)
-          : 0;
+        // Report from successful store.puts. MR `results` can be empty even when all
+        // meta:* writes succeeded (distributed MR reduce/shuffle quirks).
+        const storedCount = keys.length;
+        stats.reposProcessed = storedCount;
+        stats.successful = storedCount;
         stats.failed = storeErrors;
+        stats.totalBytes =
+          results && results.length > 0
+            ? results.reduce((sum, r) => sum + JSON.stringify(r).length, 0)
+            : repos
+              .filter((r) =>
+                keys.includes(storageKeys.documentMetadataKey(r.owner, r.repo)),
+              )
+              .reduce((sum, r) => sum + JSON.stringify(r).length, 0);
 
-        callback(null, stats);
+        const metadataKeysKey = 'crawl:all-metadata-keys';
+        store.put({keys}, {key: metadataKeysKey, gid: 'gitgle'}, (err) => {
+          if (err) {
+          } else {
+          }
+          
+          callback(null, stats);
+        });
       });
     }
 

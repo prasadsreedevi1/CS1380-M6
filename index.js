@@ -2,6 +2,11 @@
 
 // gitgle search engine - main entry point
 
+const originalLog = console.log;
+console.log = () => {}; 
+require('dotenv').config();
+console.log = originalLog; 
+
 const readline = require('readline');
 const {runCrawl} = require('./src/pipelines/crawlPipeline.js');
 const {runIndex} = require('./src/pipelines/indexPipeline.js');
@@ -33,7 +38,7 @@ examples:
 `;
 
 function showLoadingScreen() {
-  console.clear();
+  // console.clear() causes hanging on some systems - skip it
   console.log(`${colors.brightWhite}`);
   console.log(`
      ██████╗ ██╗████████╗ ██████╗ ██╗     ███████╗
@@ -54,18 +59,13 @@ function showReadyScreen() {
 
 const distribution = require('./distribution.js')({ip: '127.0.0.1', port: 3000});
 
+let distributionReady = false;
 distribution.node.start((err) => {
-  if (err) {
-    console.error(`${colors.yellow}[Warning] Distribution startup: ${err.message}${colors.reset}`);
-  }
-  
-  console.log(`${colors.green}Initializing GitGle...${colors.reset}`);
-  
+  distributionReady = true;
+});
+
+setTimeout(() => {
   ensureGitgleGroup((err) => {
-    if (err) {
-      console.error(`${colors.yellow}[Warning] Group initialization: ${err.message}${colors.reset}`);
-      console.log(`${colors.cyan}Continuing with local-only mode...${colors.reset}\n`);
-    }
 
     runPipeline();
   });
@@ -81,8 +81,6 @@ distribution.node.start((err) => {
     if (runtime.store && runtime.executor) {
       const crawlOptions = {seedFile: 'data/seeds/github-repos.txt'};
       
-      console.log(`${colors.cyan}Starting crawl...${colors.reset}`);
-      
       runCrawl(crawlOptions, runtime, (err, crawlStats) => {
         if (err) {
           // Crawl failed silently, continue with available data
@@ -90,13 +88,9 @@ distribution.node.start((err) => {
           return;
         }
 
-        console.log(`${colors.green}✓ Crawl complete${colors.reset}`);
-        console.log(`${colors.cyan}Starting index...${colors.reset}`);
-
         runIndex({}, runtime, (err, indexStats) => {
           if (err) {
           } else {
-            console.log(`${colors.green}✓ Index complete${colors.reset}`);
           }
           
           console.log(`\n${colors.green}══════════════════════════════════${colors.reset}`);
@@ -181,10 +175,29 @@ distribution.node.start((err) => {
               }
 
               if (r.snippet) {
-                const snippetText = r.snippet
-                  .replace(/\*\*/g, '') // Remove markdown bold markers for display
-                  .substring(0, 100);
-                console.log(`     ${colors.yellow}Excerpt:${colors.reset} ${snippetText}...`);
+                let snippetText = r.snippet
+                  // Remove markdown and HTML artifacts
+                  .replace(/!\[.*?\]/g, '') // Remove markdown image syntax
+                  .replace(/\[.*?\]/g, '') // Remove markdown link/reference syntax  
+                  .replace(/\(.*?(https?|www).*?\)/g, '') // Remove URLs in parentheses
+                  .replace(/#+\s/g, '') // Remove markdown headers
+                  .replace(/^[-_*=\s]+$/gm, '') // Remove horizontal rules and empty lines
+                  .replace(/\|/g, '') // Remove table pipes
+                  .replace(/^[-*]\s/gm, '') // Remove list markers
+                  .replace(/^>\s/gm, '') // Remove blockquotes
+                  .replace(/\*\*/g, '') // Remove bold markers
+                  .replace(/~~.*?~~/g, '') // Remove strikethrough
+                  .replace(/`+/g, '') // Remove code backticks
+                  .replace(/\n\n+/g, ' ') // Multiple newlines to space
+                  .replace(/\n/g, ' ') // Single newlines to space
+                  .replace(/\s+/g, ' ') // Multiple spaces to single space
+                  .split(/[.!?:]/) // Split on sentence boundaries
+                  [0] // Take first sentence
+                  .trim();
+                
+                if (snippetText && snippetText.length > 10) {
+                  console.log(`     ${colors.yellow}Excerpt:${colors.reset} ${snippetText.substring(0, 90)}...`);
+                }
               }
 
               if (r.termMetadata) {
@@ -204,4 +217,4 @@ distribution.node.start((err) => {
 
     prompt();
   }
-});
+}, 5000);

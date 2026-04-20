@@ -29,11 +29,13 @@ function getMetadataBoost(metadata) {
 
 function getIndexStats(store, callback) {
   const key = storageKeys.indexStatsKey();
-  store.get({key}, (err, stats) => {
+  
+  store.get({key, gid: 'gitgle'}, (err, stats) => {
     if (err) {
       return callback(null, {docsIndexed: 0, uniqueTerms: 0, indexedTerms: []});
     }
-    callback(null, stats || {docsIndexed: 0, uniqueTerms: 0, indexedTerms: []});
+    const statsData = stats || {docsIndexed: 0, uniqueTerms: 0, indexedTerms: []};
+    callback(null, statsData);
   });
 }
 
@@ -50,7 +52,9 @@ function executeSearch(queryString, options, runtime, callback) {
   const queryTerm = queryString.toLowerCase().trim();
 
   getIndexStats(store, (err, indexStats) => {
-    if (err || !indexStats || indexStats.docsIndexed === 0) {
+    const docsIndexed = indexStats && indexStats.docsIndexed ? indexStats.docsIndexed : 0;
+    
+    if (!docsIndexed || docsIndexed === 0) {
       callback(null, {
         query: queryString,
         results: [],
@@ -59,11 +63,21 @@ function executeSearch(queryString, options, runtime, callback) {
       return;
     }
 
-    const totalDocs = indexStats.docsIndexed;
+    const totalDocs = docsIndexed;
 
-    const indexKey = storageKeys.invertedIndexKey(queryTerm);
-    store.get(indexKey, (err, entry) => {
-      if (err || !entry || !entry.postings) {
+    store.get({key: 'inv:full-index', gid: 'gitgle'}, (err, fullIndex) => {
+      if (err || !fullIndex) {
+        console.log(`[SEARCH] Could not load inverted index: ${err ? err.message : 'not found'}`);
+        callback(null, {
+          query: queryString,
+          results: [],
+          total: 0,
+        });
+        return;
+      }
+
+      const entry = fullIndex[queryTerm];
+      if (!entry || !entry.postings) {
         callback(null, {
           query: queryString,
           results: [],
@@ -83,7 +97,7 @@ function executeSearch(queryString, options, runtime, callback) {
         const metaKey = storageKeys.documentMetadataKey(owner, repo);
         const termFreq = entry.postings[docId] || 0;
 
-        store.get(metaKey, (err, metadata) => {
+        store.get({key: metaKey, gid: 'gitgle'}, (err, metadata) => {
           if (!err && metadata) {
             const tfidfScore = calculateTFIDF(termFreq, docFreq, totalDocs);
             

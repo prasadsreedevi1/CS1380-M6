@@ -27,6 +27,29 @@ function formatResultForCLI(result, rank) {
     lines.push(`   Score: ${result.score.toFixed(4)}`);
   }
 
+  if (result.snippet) {
+    lines.push(`   Match: ${result.snippet.substring(0, 100)}...`);
+  }
+
+  if (result.termMetadata) {
+    const tm = result.termMetadata;
+    const metaStr = [];
+    if (tm.frequency) metaStr.push(`freq: ${tm.frequency}`);
+    if (tm.density) metaStr.push(`density: ${tm.density}%`);
+    if (metaStr.length > 0) {
+      lines.push(`   Metadata: ${metaStr.join(', ')}`);
+    }
+  }
+
+  if (result.docMetadata) {
+    const dm = result.docMetadata;
+    const metaStr = [];
+    if (dm.wordCount) metaStr.push(`${dm.wordCount} words`);
+    if (metaStr.length > 0) {
+      lines.push(`   Doc: ${metaStr.join(', ')}`);
+    }
+  }
+
   return lines.join('\n');
 }
 

@@ -23,30 +23,46 @@ function runIndex(options, runtime, callback) {
     totalBytes: 0,
   };
 
-  store.get(null, (err, keys) => {
-    if (err) return callback(err);
-
-    if (!keys || keys.length === 0) {
-      return callback(new Error('No documents found in store — run crawl first'));
+  const metadataKeysKey = 'crawl:all-metadata-keys';
+  
+  store.get({key: metadataKeysKey, gid: 'gitgle'}, (err, metadata) => {
+    if (err || !metadata || !metadata.keys) {
+      return callback(new Error('Could not retrieve metadata keys from store — run crawl first'));
     }
 
-    const docKeys = keys.filter(
-      (k) => typeof k === 'string' && k.startsWith('meta'),
-    );
+    const docKeys = metadata.keys;
+    
+    if (!docKeys || docKeys.length === 0) {
+      return callback(new Error('No documents found in store — run crawl first'));
+    }
 
     if (docKeys.length === 0) {
       return callback(new Error('No metadata keys found — run crawl first'));
     }
+
+    let callbackCalled = false;
+    const timeoutId = setTimeout(() => {
+      if (!callbackCalled) {
+        callbackCalled = true;
+        
+        simpleFallbackIndex(store, docKeys, jobId, indexStats, callback);
+      }
+    }, 30000); 
 
     mr.exec({
       gid: 'gitgle',
       keys: docKeys,
 
       map: function(key, repoData) {
-        if (!repoData || !repoData.readme) return [];
+        if (!repoData) return [];
+        
+        let textToIndex = (repoData.readme || '') + ' ' + (repoData.description || '');
+        if (!textToIndex || textToIndex.trim().length === 0) {
+          return []; 
+        }
 
         const results = [];
-        const text = repoData.readme.toLowerCase();
+        const text = textToIndex.toLowerCase();
         const docId = `${repoData.owner}/${repoData.repo}`;
 
         const tokens = text
@@ -89,56 +105,52 @@ function runIndex(options, runtime, callback) {
       },
 
     }, (err, results) => {
-      if (err) return callback(err);
+      if (!callbackCalled) {
+        callbackCalled = true;
+        clearTimeout(timeoutId);
 
-      indexStats.docsIndexed = docKeys.length;
-      indexStats.uniqueTerms = results ? results.length : 0;
-      indexStats.totalPostings = results
-        ? results.reduce((sum, r) => {
-            const entry = r ? Object.values(r)[0] : null;
-            return sum + (entry ? Object.keys(entry.postings || {}).length : 0);
-          }, 0)
-        : 0;
+        if (err) {
+          return simpleFallbackIndex(store, docKeys, jobId, indexStats, callback);
+        }
 
-      writeInvertedIndexEntries(store, results, (writeErr) => {
-        if (writeErr) return callback(writeErr);
+        if (!results || results.length === 0) {
+          return simpleFallbackIndex(store, docKeys, jobId, indexStats, callback);
+        }
 
-        storeIndexStats(store, jobId, indexStats, (statsErr) => {
-          if (statsErr) return callback(statsErr);
+        indexStats.docsIndexed = docKeys.length;
+        indexStats.uniqueTerms = results ? results.length : 0;
+        indexStats.totalPostings = results
+          ? results.reduce((sum, r) => {
+              const entry = r ? Object.values(r)[0] : null;
+              return sum + (entry ? Object.keys(entry.postings || {}).length : 0);
+            }, 0)
+          : 0;
 
-          indexStats.endTime = Date.now();
-          indexStats.duration = indexStats.endTime - indexStats.startTime;
-
-          callback(null, indexStats);
+        const invertedIndex = {};
+        results.forEach((row) => {
+          if (row) {
+            const term = Object.keys(row)[0];
+            const entry = row[term];
+            if (term && entry) {
+              invertedIndex[term] = entry;
+            }
+          }
         });
-      });
-    });
-  });
-}
 
-function writeInvertedIndexEntries(store, mrResults, callback) {
-  const rows = (mrResults || []).filter(Boolean);
-  if (rows.length === 0) {
-    return callback(null);
-  }
+        store.put(invertedIndex, {key: 'inv:full-index', gid: 'gitgle'}, (putErr) => {
+          if (putErr) {
+            return callback(putErr);
+          }
+          storeIndexStats(store, jobId, indexStats, (statsErr) => {
+            if (statsErr) return callback(statsErr);
 
-  let pending = rows.length;
-  let firstErr = null;
+            indexStats.endTime = Date.now();
+            indexStats.duration = indexStats.endTime - indexStats.startTime;
 
-  rows.forEach((row) => {
-    const term = Object.keys(row)[0];
-    const entry = row[term];
-    if (!term || !entry) {
-      pending--;
-      if (pending === 0) callback(firstErr);
-      return;
-    }
-
-    const invKey = storageKeys.invertedIndexKey(term);
-    store.put(entry, {key: invKey, gid: 'gitgle'}, (err) => {
-      if (err) firstErr = firstErr || err;
-      pending--;
-      if (pending === 0) callback(firstErr);
+            callback(null, indexStats);
+          });
+        });
+      }
     });
   });
 }
@@ -164,7 +176,97 @@ function storeIndexStats(store, jobId, stats, callback) {
   });
 }
 
+function simpleFallbackIndex(store, docKeys, jobId, indexStats, callback) {
+  
+  const allTerms = {};
+  let processed = 0;
+  let errors = 0;
+
+  const processDoc = (index) => {
+    if (index >= docKeys.length) {
+      indexStats.docsIndexed = docKeys.length - errors;
+      indexStats.uniqueTerms = Object.keys(allTerms).length;
+      indexStats.totalPostings = Object.values(allTerms).reduce(
+        (sum, entry) => sum + Object.keys(entry.postings || {}).length,
+        0
+      );
+
+      const results = Object.entries(allTerms).map(([term, entry]) => {
+        const result = {};
+        result[term] = entry;
+        return result;
+      });
+
+      writeInvertedIndexEntries(store, results, (writeErr) => {
+        if (writeErr) return callback(writeErr);
+
+        storeIndexStats(store, jobId, indexStats, (statsErr) => {
+          if (statsErr) return callback(statsErr);
+
+          indexStats.endTime = Date.now();
+          indexStats.duration = indexStats.endTime - indexStats.startTime;
+
+          callback(null, indexStats);
+        });
+      });
+      return;
+    }
+
+    const docKey = docKeys[index];
+    store.get({key: docKey, gid: 'gitgle'}, (err, repoData) => {
+      if (err || !repoData) {
+        errors++;
+        processed++;
+        if (processed % 20 === 0) {
+        }
+        processDoc(index + 1);
+        return;
+      }
+
+      let textToIndex = (repoData.readme || '') + ' ' + (repoData.description || '');
+      if (!textToIndex || textToIndex.trim().length === 0) {
+        processed++;
+        if (processed % 20 === 0) {
+          console.log(`[INDEX FALLBACK] Processed ${processed}/${docKeys.length} documents`);
+        }
+        processDoc(index + 1);
+        return;
+      }
+
+      const text = textToIndex.toLowerCase();
+      const docId = `${repoData.owner}/${repoData.repo}`;
+      const tokens = text.split(/\W+/).filter(t => t.length > 2);
+      
+      const termFreqs = {};
+      tokens.forEach(token => {
+        termFreqs[token] = (termFreqs[token] || 0) + 1;
+      });
+
+      Object.entries(termFreqs).forEach(([term, freq]) => {
+        if (!allTerms[term]) {
+          allTerms[term] = {
+            term,
+            postings: {},
+            documentFrequency: 0,
+          };
+        }
+        allTerms[term].postings[docId] = freq;
+      });
+
+      processed++;
+      if (processed % 20 === 0) {
+        console.log(`[INDEX FALLBACK] Processed ${processed}/${docKeys.length} documents`);
+      }
+      
+      processDoc(index + 1);
+    });
+  };
+
+  processDoc(0);
+}
+
 module.exports = {
   runIndex,
   storeIndexStats,
+  simpleFallbackIndex,
 };

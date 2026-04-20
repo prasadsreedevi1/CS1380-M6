@@ -1,6 +1,5 @@
 const seedLoader = require('../services/seedLoader.js');
 const storageKeys = require('../services/storageKeys.js');
-const demoRepositories = require('../data/demoRepositories.js');
 const { fetchRepoData } = require('./repoDataFetcher.js');
 
 function runRecursiveCrawl(options, runtime, callback) {
@@ -60,7 +59,7 @@ function runRecursiveCrawl(options, runtime, callback) {
 
       const {owner, repo, depth = 0} = entry;
       
-      fetchRepoData({owner, repo}, demoRepositories, (err, repoData) => {
+      fetchRepoData({owner, repo}, null, (err, repoData) => {
         if (err) {
           stats.errors++;
           return next();

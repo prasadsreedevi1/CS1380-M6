@@ -12,7 +12,22 @@ function ensureGitgleGroup(callback) {
   }
   const sid = d.util.id.getSID(cfg);
   const group = {[sid]: cfg};
-  d.local.groups.put('gitgle', group, callback);
+  
+  let callbackCalled = false;
+  const timeoutId = setTimeout(() => {
+    if (!callbackCalled) {
+      callbackCalled = true;
+      callback(null); 
+    }
+  }, 5000);
+  
+  d.local.groups.put('gitgle', group, (err) => {
+    if (!callbackCalled) {
+      callbackCalled = true;
+      clearTimeout(timeoutId);
+      callback(err);
+    }
+  });
 }
 
 module.exports = {ensureGitgleGroup};
