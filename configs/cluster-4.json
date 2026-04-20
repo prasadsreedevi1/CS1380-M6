@@ -17,5 +17,6 @@
       "port": 3001
     }
   ],
-  "seedFile": "data/seeds/github-repos.txt"
+  "seedFile": "data/seeds/github-repos.txt",
+  "skipWorkerSpawn": true
 }

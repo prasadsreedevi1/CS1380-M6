@@ -17,6 +17,9 @@ console.log(`Runs: ${runs}`);
 console.log(`Mode: ${fetchMode}`);
 console.log(`Seed file: ${seedFile}`);
 console.log(`Cluster config: ${clusterConfig}`);
+if (process.env.SKIP_WORKER_SPAWN === '1') {
+  console.log('SKIP_WORKER_SPAWN=1 (remote workers; start node on each worker EC2 first)');
+}
 
 for (let i = 1; i <= runs; i += 1) {
   const logFile = path.join(runDir, `trial-${i}.log`);

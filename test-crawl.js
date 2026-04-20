@@ -27,10 +27,16 @@ const workers = (cluster.workers || []).map((w) => ({
   port: Number(w.port || 3001),
 }));
 
+const skipWorkerSpawn =
+  process.env.SKIP_WORKER_SPAWN === '1' || cluster.skipWorkerSpawn === true;
+
 const distribution = require('./distribution.js')(coordinator);
 
 distribution.node.start(() => {
   console.log('Coordinator up');
+  if (skipWorkerSpawn) {
+    console.log('SKIP_WORKER_SPAWN: assuming workers already running (remote EC2).');
+  }
 
   function spawnWorker(index, callback) {
     if (index >= workers.length) {
@@ -46,7 +52,7 @@ distribution.node.start(() => {
     });
   }
 
-  spawnWorker(0, (spawnErr) => {
+  const afterWorkers = (spawnErr) => {
     if (spawnErr) {
       console.error('Worker spawn failed:', spawnErr);
       process.exit(1);
@@ -84,5 +90,11 @@ distribution.node.start(() => {
         );
       });
     });
-  });
+  };
+
+  if (skipWorkerSpawn) {
+    afterWorkers(null);
+  } else {
+    spawnWorker(0, afterWorkers);
+  }
 });
