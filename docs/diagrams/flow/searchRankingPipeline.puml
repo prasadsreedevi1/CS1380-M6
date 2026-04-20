@@ -1,0 +1,113 @@
+@startuml GITGLE Search & Ranking Architecture
+title GITGLE: Search Query Processing & TF-IDF Ranking Pipeline
+
+participant User
+participant Query as "Query\nProcessor"
+participant Index as "Inverted\nIndex"
+participant Scorer as "Scoring\nEngine"
+participant Results as "Result\nFormatter"
+participant Display as "CLI Display"
+
+== QUERY PARSING ==
+User -> Query: "python framework"
+activate Query
+
+Query -> Query: Tokenize\n["python", "framework"]
+Query -> Query: Lowercase\n["python", "framework"]
+Query -> Query: Stem\n["python", "framework"]
+
+== INDEX LOOKUP ==
+Query -> Index: Look up term: "python"
+activate Index
+
+Index -> Index: Find in inverted index:\ninv:full-index["python"]
+Index -> Index: Return postings list:\n[{repo: google/gson,\nfreq: 29,\ntfIdfScore: 38.278},\n{repo: aio-libs/aiohttp,\nfreq: 0,\ntfIdfScore: 7.656}, ...]
+
+Index -> Query: Return 6 matching repos
+deactivate Index
+
+Query -> Index: Look up term: "framework"
+activate Index
+Index -> Index: Find in inverted index:\ninv:full-index["framework"]
+Index -> Index: Return postings for "framework"
+Index -> Query: Return matching repos
+deactivate Index
+
+== RESULT MERGING ==
+Query -> Query: Merge results from\nboth terms
+Query -> Query: Union of matching repos
+
+Query -> Scorer: Submit results for\nfinal ranking
+
+== TF-IDF SCORING ==
+activate Scorer
+
+Scorer -> Scorer: For each repo:
+
+note over Scorer
+  **Score Calculation:**
+  
+  **Base TF-IDF:**
+  score = TF × log(totalDocs / docFreq)
+  
+  For term "python":
+  - TF (in django-rest-framework) = 5
+  - docFreq = 6 repos have "python"
+  - totalDocs = 114 repos
+  
+  score = 5 × log(114/6)
+        = 5 × log(19)
+        = 5 × 2.944
+        = 14.719
+  
+  **Metadata Boost Factors:**
+  - Language: Python → 1.3×
+  - Stars: 29974 (>1000) → 2.0×
+  
+  **Final Score:**
+  14.719 × 1.3 × 2.0 = 38.278 ✓
+end note
+
+Scorer -> Scorer: 1. Get TF for term in repo\n   (term frequency from postings)
+
+Scorer -> Scorer: 2. Calculate IDF\n   log(totalDocs / documentFrequency)
+
+Scorer -> Scorer: 3. Calculate base score\n   TF × IDF
+
+Scorer -> Scorer: 4. Apply metadata boosts:\n   - Language (1.3× for major languages)\n   - Stars (1.2-2.0× based on count)\n   - Recency (optional future feature)\n   - PageRank (future feature)
+
+Scorer -> Scorer: 5. Final score = base score × boosts
+
+Scorer -> Results: Return ranked results\n(sorted by score descending)
+deactivate Scorer
+
+== RESULT FORMATTING ==
+activate Results
+
+Results -> Results: Extract repo metadata:\n- Owner/repo name\n- Star count\n- Language\n- Description
+
+Results -> Results: Extract snippet from README:\n- Find first 100 chars\n- Clean markdown:\n  - Remove ![images](urls)\n  - Remove [links](urls)\n  - Remove **bold**\n  - Remove `code`\n  - Remove headers\n  - Remove tables
+
+Results -> Results: Get term metadata:\n- Frequency in repo\n- Density percentage\n  (frequency / total terms)
+
+Results -> Display: Return formatted results
+deactivate Results
+
+== DISPLAY ==
+activate Display
+
+Display -> User: Display results:\n\n1. encode/django-rest-framework\n   29974 ⭐ | Python | Score: 38.278\n   Web APIs for Django. 🎸...\n   freq: 5 | density: 0.87%\n\n2. aio-libs/aiohttp\n   16405 ⭐ | Python | Score: 7.656\n   Async HTTP framework...\n   freq: 0 | density: 0%
+
+deactivate Display
+
+note right of Scorer
+  TF-IDF balances:
+  - Frequent terms (TF)
+  - Discriminative terms (IDF)
+  
+  Boosts account for:
+  - Popular repos (stars)
+  - Language relevance
+end note
+
+@enduml

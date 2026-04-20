@@ -1,0 +1,191 @@
+@startuml GITGLE Text Processing Pipeline
+title GITGLE: Text Processing & Normalization Pipeline
+
+rectangle "Text Processing Stages" {
+  
+  rectangle "Stage 1: Raw Input" {
+    file "Repository README.md" as raw
+    note right of raw
+      Original markdown content:
+      # Django REST Framework
+      **Powerful** and [flexible](link) web API
+      framework for building REST APIs in Django.
+      
+      Features:
+      - Authentication
+      - Permissions
+      - Throttling
+      ![badge](image.png)
+    end note
+  }
+  
+  rectangle "Stage 2: Cleaning" {
+    component "Markdown Remover" as cleaner
+    file "Cleaned Text" as cleaned
+    note right of cleaned
+      Removes:
+      - Headers (# ## ###)
+      - Markdown syntax (**)
+      - Links and images
+      - Tables and pipes
+      - Code blocks
+    end note
+  }
+  
+  rectangle "Stage 3: Tokenization" {
+    component "Tokenizer" as tokenizer
+    card "Tokens" as tokens
+    note right of tokens
+      Split on whitespace:
+      [
+        "Django",
+        "REST",
+        "Framework",
+        "Powerful",
+        "flexible",
+        "web",
+        "API",
+        "framework",
+        "building",
+        "REST",
+        "APIs",
+        "Django",
+        "Features",
+        "Authentication",
+        "Permissions",
+        "Throttling"
+      ]
+    end note
+  }
+  
+  rectangle "Stage 4: Normalization" {
+    component "Lowercase" as lower
+    component "Remove Punctuation" as punct
+    component "Remove Stopwords" as stopwords
+    card "Normalized Tokens" as normalized
+    note right of normalized
+      After normalization:
+      [
+        "django",
+        "rest",
+        "framework",
+        "powerful",
+        "flexible",
+        "web",
+        "api",
+        "framework",
+        "building",
+        "rest",
+        "apis",
+        "django",
+        "features",
+        "authentication",
+        "permissions",
+        "throttling"
+      ]
+    end note
+  }
+  
+  rectangle "Stage 5: Stemming" {
+    component "Porter Stemmer" as stemmer
+    card "Stemmed Tokens" as stemmed
+    note right of stemmed
+      After stemming:
+      - "framework" → "framework"
+      - "building" → "build"
+      - "authentication" → "authen"
+      - "powerful" → "power"
+      
+      Result:
+      [
+        "django",
+        "rest",
+        "framework",
+        "power",
+        "flexibl",
+        "web",
+        "api",
+        ...
+      ]
+    end note
+  }
+  
+  rectangle "Stage 6: Indexing" {
+    component "Term Counter" as counter
+    database "Inverted Index" as inverted
+    note right of inverted
+      Inverted Index Entry:
+      Term: "framework"
+      {
+        postings: [
+          {repoId: "encode/django-rest-framework",
+           frequency: 5,
+           positions: [3, 45, 67, 102, 145],
+           tfIdfScore: 38.278},
+          {repoId: "full-stack-python/fullstackpython",
+           frequency: 2,
+           positions: [12, 87],
+           tfIdfScore: 12.456}
+        ],
+        documentFrequency: 23,
+        collectionFrequency: 47
+      }
+    end note
+  }
+}
+
+raw --> cleaner
+cleaner --> cleaned
+cleaned --> tokenizer
+tokenizer --> tokens
+tokens --> lower
+lower --> punct
+punct --> stopwords
+stopwords --> normalized
+normalized --> stemmer
+stemmer --> stemmed
+stemmed --> counter
+counter --> inverted
+
+rectangle "Search Time Processing" {
+  file "Query: 'python framework'" as query
+  component "Query Tokenizer" as q_tokenizer
+  component "Query Stemmer" as q_stemmer
+  card "Processed Query" as processed_query
+  database "Index Lookup" as q_lookup
+  
+  query --> q_tokenizer
+  q_tokenizer --> q_stemmer
+  q_stemmer --> processed_query
+  
+  note right of processed_query
+    Query tokens after processing:
+    ["python", "framework"]
+    
+    After stemming:
+    ["python", "framework"]
+  end note
+  
+  processed_query --> q_lookup: Look up in index
+  
+  note right of q_lookup
+    Find all repos containing
+    both terms "python" AND "framework"
+    
+    Return ranked results based on:
+    - TF-IDF scores
+    - Metadata boosts
+    - Keyword density
+  end note
+}
+
+note bottom
+  **Text Processing Goals:**
+  1. Normalize variations (build, builder, building → build)
+  2. Remove noise (stopwords, punctuation)
+  3. Extract meaningful tokens
+  4. Support efficient index lookup
+  5. Enable ranking by frequency/position
+end note
+
+@enduml
