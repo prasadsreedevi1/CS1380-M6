@@ -15,18 +15,32 @@ function mr(config) {
     const mrService = {
       mapper: configuration.map,
       reducer: configuration.reduce,
-      map: function(mrGid, mrID, callback) {
+      // Args: (mrGid, mrID, jobKeys?, callback). Remote workers do not have `configuration`
+      // in closure (serialization), so the coordinator passes jobKeys via RPC in runMap.
+      map: function(mrGid, mrID, jobKeys, callback) {
+        let cb = callback;
+        let keysArg = jobKeys;
+        if (typeof keysArg === 'function') {
+          cb = keysArg;
+          keysArg = undefined;
+        }
+
         const localStore = globalThis.distribution.local.store;
-        
-        localStore.get({key: null, gid: mrGid}, (e, keys) => {
-          if (e || !keys || keys.length === 0) {
-            return callback(null, []);
+        const id = globalThis.distribution.util.id;
+
+        const jobKeyList = Array.isArray(keysArg)
+          ? keysArg
+          : (configuration && configuration.keys ? configuration.keys : null);
+
+        const mapKeyList = (keyList) => {
+          if (!keyList || keyList.length === 0) {
+            return cb(null, []);
           }
 
           let done = 0;
           const results = [];
 
-          for (const key of keys) {
+          for (const key of keyList) {
             localStore.get({key: key, gid: mrGid}, (e, value) => {
               if (!e && value !== undefined) {
                 const mapped = this.mapper(key, value);
@@ -43,13 +57,29 @@ function mr(config) {
                 }
               }
               done++;
-              if (done === keys.length) {
+              if (done === keyList.length) {
                 localStore.put(results, mrID + '_map', (e2) => {
-                  callback(null, results);
+                  cb(null, results);
                 });
               }
             });
           }
+        };
+
+        // Try every job key on this node. Listing keys from disk uses sanitized
+        // filenames (e.g. metafbfacebookreact) while routing used meta:owner:repo;
+        // naiveHash(key) can disagree, so we do not pre-filter by hash — wrong-node
+        // gets return no value and are skipped inside mapKeyList.
+        if (jobKeyList && jobKeyList.length > 0) {
+          mapKeyList.call(this, jobKeyList);
+          return;
+        }
+
+        localStore.get({key: null, gid: mrGid}, (e, keys) => {
+          if (e || !keys || keys.length === 0) {
+            return cb(null, []);
+          }
+          mapKeyList.call(this, keys);
         });
       },
       shuffle: function(gid, mrID, callback) {
@@ -157,9 +187,10 @@ function mr(config) {
 
       function runMap() {
         let mapCount = 0;
+        const keysPayload = allKeys || [];
         for (const node of nodeList) {
           localComm.send(
-            [gid, mrID],
+            [gid, mrID, keysPayload],
             {node: node, service: mrServiceName, method: 'map'},
             (e) => {
               mapCount++;

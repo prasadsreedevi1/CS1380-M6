@@ -1,4 +1,5 @@
 const fs = require('fs');
+const storageKeys = require('./src/services/storageKeys.js');
 
 function loadClusterConfig() {
   const configPath = process.env.CLUSTER_CONFIG || './configs/cluster-4.json';
@@ -93,13 +94,27 @@ distribution.node.start(() => {
           }
           console.log('Index stats:', indexStats);
 
-          // verify a term exists in the inverted index
+          // Mock README text includes "mock" / "benchmarking" — not "javascript".
+          const verifyTerm = process.env.VERIFY_TERM || 'mock';
+          const invKey = storageKeys.invertedIndexKey(verifyTerm);
+
+          if (!indexStats.uniqueTerms || indexStats.uniqueTerms === 0) {
+            console.warn(
+              'Verify skipped: no inverted-index terms (uniqueTerms=0). Check MR / workers.',
+            );
+            process.exit(0);
+            return;
+          }
+
           distribution.gitgle.store.get(
-            { key: 'inv:javascript', gid: 'gitgle' },
+            { key: invKey, gid: 'gitgle' },
             (err, val) => {
-              if (err) console.error('Verify failed:', err);
-              else console.log('Verified term in index:', val);
-              process.exit(0);
+              if (err) {
+                console.error(`Verify failed for ${invKey}:`, err.message);
+              } else {
+                console.log('Verified term in index:', verifyTerm, val);
+              }
+              process.exit(err ? 1 : 0);
             }
           );
         });
