@@ -37,6 +37,7 @@ function runCrawl(options, runtime, callback) {
     let fetched = 0;
     let fetchErrors = 0;
 
+    const staggerMs = Number(process.env.CRAWL_STAGGER_MS ?? 100);
     seeds.forEach((seed, index) => {
       setTimeout(() => {
         fetchRepoData(seed, null, (err, repoData) => {
@@ -66,7 +67,7 @@ function runCrawl(options, runtime, callback) {
             });
           }
         });
-      }, index * 100);
+      }, index * staggerMs);
     });
   });
 }

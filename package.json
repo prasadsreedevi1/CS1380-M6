@@ -8,6 +8,7 @@
   },
   "scripts": {
     "start": "node --no-deprecation index.js",
+    "auto": "node --no-deprecation index.js",
     "benchmark": "node scripts/run-benchmark.js"
   },
   "dependencies": {
