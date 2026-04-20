@@ -1,6 +1,5 @@
 const seedLoader = require('../services/seedLoader.js');
 const storageKeys = require('../services/storageKeys.js');
-const demoRepositories = require('../data/demoRepositories.js');
 const { fetchRepoData } = require('./repoDataFetcher.js');
 const { runRecursiveCrawl } = require('./recursiveCrawl.js');
 
@@ -40,7 +39,7 @@ function runCrawl(options, runtime, callback) {
 
     seeds.forEach((seed, index) => {
       setTimeout(() => {
-        fetchRepoData(seed, demoRepositories, (err, repoData) => {
+        fetchRepoData(seed, null, (err, repoData) => {
           if (err) {
             fetchErrors++;
           }
@@ -80,8 +79,11 @@ function runCrawlJob(store, mr, jobId, options, repos, callback) {
     totalBytes: 0,
   };
 
+
   globalThis.distribution.local.groups.get('gitgle', (err, nodes) => {
-    if (err) return callback(err);
+    if (err) {
+      return callback(err);
+    }
 
     const nodeList = Object.values(nodes);
     if (nodeList.length === 0) {
@@ -103,6 +105,7 @@ function runCrawlJob(store, mr, jobId, options, repos, callback) {
       if (keys.length === 0) {
         return callback(new Error('No repos stored successfully'));
       }
+
 
       mr.exec({
         keys,
@@ -130,7 +133,14 @@ function runCrawlJob(store, mr, jobId, options, repos, callback) {
           : 0;
         stats.failed = storeErrors;
 
-        callback(null, stats);
+        const metadataKeysKey = 'crawl:all-metadata-keys';
+        store.put({keys}, {key: metadataKeysKey, gid: 'gitgle'}, (err) => {
+          if (err) {
+          } else {
+          }
+          
+          callback(null, stats);
+        });
       });
     }
 
