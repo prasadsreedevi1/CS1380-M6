@@ -41,13 +41,14 @@ function runIndex(options, runtime, callback) {
     }
 
     let callbackCalled = false;
+    const mrTimeoutMs = Number(process.env.MR_INDEX_TIMEOUT_MS || 30000);
     const timeoutId = setTimeout(() => {
       if (!callbackCalled) {
         callbackCalled = true;
-        
+        console.warn(`[INDEX] MR timeout after ${mrTimeoutMs}ms, using fallback indexer.`);
         simpleFallbackIndex(store, docKeys, jobId, indexStats, callback);
       }
-    }, 30000); 
+    }, mrTimeoutMs);
 
     mr.exec({
       gid: 'gitgle',
@@ -110,10 +111,12 @@ function runIndex(options, runtime, callback) {
         clearTimeout(timeoutId);
 
         if (err) {
+          console.warn(`[INDEX] MR exec error, using fallback indexer: ${err.message}`);
           return simpleFallbackIndex(store, docKeys, jobId, indexStats, callback);
         }
 
         if (!results || results.length === 0) {
+          console.warn('[INDEX] MR returned empty results, using fallback indexer.');
           return simpleFallbackIndex(store, docKeys, jobId, indexStats, callback);
         }
 
