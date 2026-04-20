@@ -211,9 +211,25 @@ function mr(config) {
         let failed = false;
         let mapCount = 0;
         const keysPayload = allKeys || [];
+        const nodeNids = nodeList.map((n) => globalThis.distribution.util.id.getNID(n));
+        const keysByNid = {};
+        nodeNids.forEach((nid) => {
+          keysByNid[nid] = [];
+        });
+        keysPayload.forEach((key) => {
+          const kid = globalThis.distribution.util.id.getID(key);
+          const targetNid = globalThis.distribution.util.id.consistentHash(kid, nodeNids);
+          if (!keysByNid[targetNid]) {
+            keysByNid[targetNid] = [];
+          }
+          keysByNid[targetNid].push(key);
+        });
+
         for (const node of nodeList) {
+          const nodeNid = globalThis.distribution.util.id.getNID(node);
+          const nodeKeys = keysByNid[nodeNid] || [];
           localComm.send(
-            [gid, mrID, keysPayload],
+            [gid, mrID, nodeKeys],
             {node: node, service: mrServiceName, method: 'map'},
             (e) => {
               if (failed) return;
