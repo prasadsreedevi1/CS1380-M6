@@ -82,52 +82,68 @@ function mr(config) {
           mapKeyList.call(this, keys);
         });
       },
-      shuffle: function(gid, mrID, callback) {
+      shuffle: function(gid, mrID, nodesArg, callback) {
+        let cb = callback;
+        let resolvedNodes = null;
+        if (typeof nodesArg === 'function') {
+          cb = nodesArg;
+        } else if (Array.isArray(nodesArg) && nodesArg.length > 0) {
+          resolvedNodes = nodesArg;
+        }
         const localComm = globalThis.distribution.local.comm;
         const localGroups = globalThis.distribution.local.groups;
         const localStore = globalThis.distribution.local.store;
-        const mapGid = `${mrID}_map`;
         const shuffleGid = `${mrID}_shuffle`;
         const currentNID = globalThis.distribution.util.id.getNID(globalThis.distribution.node.config);
 
         localStore.get(mrID + '_map', (e, mapResults) => {
-          if (e || !mapResults || mapResults.length === 0) return callback(null, []);
+          if (e || !mapResults || mapResults.length === 0) return cb(null, []);
 
-          let done = 0;
-          const total = mapResults.length;
+          const shuffleWithNodes = (nodeObjects) => {
+            const nids = nodeObjects.map((n) => globalThis.distribution.util.id.getNID(n));
+            let done = 0;
+            const total = mapResults.length;
 
-          mapResults.forEach((item) => {
-            const [k] = Object.keys(item);
-            const v = item[k];
-
-            localGroups.get(gid, (e, nodes) => {
-              if (e || !nodes) {
-                done++;
-                if (done === total) callback(null, mapResults);
-                return;
-              }
-
-              const nids = Object.values(nodes).map((n) => globalThis.distribution.util.id.getNID(n));
+            mapResults.forEach((item) => {
+              const [k] = Object.keys(item);
+              const v = item[k];
               const kid = globalThis.distribution.util.id.getID(k);
               const nid = globalThis.distribution.util.id.consistentHash(kid, nids);
-              
+
               if (nid === currentNID) {
-                localStore.append(v, {key: k, gid: shuffleGid}, (e2) => {
+                localStore.append(v, {key: k, gid: shuffleGid}, () => {
                   done++;
-                  if (done === total) callback(null, mapResults);
+                  if (done === total) cb(null, mapResults);
                 });
               } else {
-                const targetNode = Object.values(nodes).find((n) => globalThis.distribution.util.id.getNID(n) === nid);
+                const targetNode = nodeObjects.find((n) => globalThis.distribution.util.id.getNID(n) === nid);
+                if (!targetNode) {
+                  done++;
+                  if (done === total) cb(null, mapResults);
+                  return;
+                }
                 localComm.send(
                   [v, {key: k, gid: shuffleGid}],
                   {node: targetNode, service: 'store', method: 'append', gid: 'local'},
-                  (e2) => {
+                  () => {
                     done++;
-                    if (done === total) callback(null, mapResults);
+                    if (done === total) cb(null, mapResults);
                   }
                 );
               }
             });
+          };
+
+          if (resolvedNodes && resolvedNodes.length > 0) {
+            shuffleWithNodes(resolvedNodes);
+            return;
+          }
+
+          localGroups.get(gid, (groupErr, nodes) => {
+            if (groupErr || !nodes) {
+              return cb(groupErr || new Error(`No group found for gid ${gid}`), null);
+            }
+            shuffleWithNodes(Object.values(nodes));
           });
         });
       },
@@ -217,7 +233,7 @@ function mr(config) {
         let shuffleCount = 0;
         for (const node of nodeList) {
           localComm.send(
-            [gid, mrID],
+            [gid, mrID, nodeList],
             {node: node, service: mrServiceName, method: 'shuffle'},
             (e) => {
               if (failed) return;
