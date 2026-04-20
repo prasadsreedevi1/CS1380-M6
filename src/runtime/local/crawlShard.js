@@ -16,7 +16,7 @@ function run(config, callback) {
   }
 
   const scope = globalThis.distribution[gid];
-  const store = scope && scope.store;
+  const store = (scope && scope.store) || (globalThis.distribution.all && globalThis.distribution.all.store);
   if (!store) {
     callback(new Error(`Store for gid "${gid}" is unavailable`));
     return;
