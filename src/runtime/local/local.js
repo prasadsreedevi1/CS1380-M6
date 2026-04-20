@@ -38,6 +38,7 @@ const mem = require('./mem.js');
 /* Store Service */
 
 const store = require('./store.js');
+const crawlShard = require('./crawlShard.js');
 
 module.exports = {
   status: status,
@@ -47,5 +48,6 @@ module.exports = {
   gossip: gossip,
   mem: mem,
   store: store,
+  crawlShard: crawlShard,
 };
 

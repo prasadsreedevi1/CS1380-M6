@@ -1,0 +1,5 @@
+data/seeds/shards/generated-500.shard-00.txt -> 127.0.0.1:3001
+data/seeds/shards/generated-500.shard-01.txt -> 127.0.0.1:3002
+data/seeds/shards/generated-500.shard-02.txt -> 127.0.0.1:3003
+data/seeds/shards/generated-500.shard-03.txt -> 127.0.0.1:3001
+data/seeds/shards/generated-500.shard-04.txt -> 127.0.0.1:3002

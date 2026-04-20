@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const seedLoader = require('../services/seedLoader.js');
 const storageKeys = require('../services/storageKeys.js');
 const { fetchRepoData } = require('./repoDataFetcher.js');
@@ -31,6 +33,10 @@ function runCrawl(options, runtime, callback) {
     crawlStats.seedsLoaded = seeds.length;
     if (seeds.length === 0) {
       return callback(new Error('No seeds found in seed file'));
+    }
+
+    if (process.env.SHARDED_CRAWL === '1') {
+      return runShardedCrawlJob(store, options, crawlStats, callback);
     }
 
     const repos = [];
@@ -68,6 +74,91 @@ function runCrawl(options, runtime, callback) {
           }
         });
       }, index * staggerMs);
+    });
+  });
+}
+
+function runShardedCrawlJob(store, options, crawlStats, callback) {
+  const shardDir = process.env.SHARD_DIR || path.join('data', 'seeds', 'shards');
+  const shardPrefix = process.env.SHARD_PREFIX || '';
+
+  let shardFiles = [];
+  try {
+    shardFiles = fs
+      .readdirSync(shardDir)
+      .filter((name) => name.endsWith('.txt') && (shardPrefix ? name.startsWith(shardPrefix) : true))
+      .sort()
+      .map((name) => path.join(shardDir, name));
+  } catch (_e) {
+    return callback(new Error(`Could not read shard directory: ${shardDir}`));
+  }
+
+  if (shardFiles.length === 0) {
+    return callback(new Error(`No shard files found in ${shardDir}`));
+  }
+
+  globalThis.distribution.local.groups.get('gitgle', (groupErr, nodes) => {
+    if (groupErr) {
+      return callback(groupErr);
+    }
+
+    const nodeList = Object.values(nodes || {});
+    if (nodeList.length === 0) {
+      return callback(new Error('No nodes in gitgle group'));
+    }
+
+    const assignments = [];
+    shardFiles.forEach((shardFile, idx) => {
+      assignments.push({
+        shardFile,
+        node: nodeList[idx % nodeList.length],
+      });
+    });
+
+    const allKeys = [];
+    let pending = assignments.length;
+    assignments.forEach((assignment) => {
+      const remote = {
+        node: assignment.node,
+        service: 'crawlShard',
+        method: 'run',
+        gid: 'local',
+      };
+      globalThis.distribution.local.comm.send(
+        [{shardFile: assignment.shardFile, gid: 'gitgle'}],
+        remote,
+        (nodeErr, nodeStats) => {
+          if (nodeErr) {
+            crawlStats.failed += 1;
+            crawlStats.apiErrors += 1;
+          } else if (nodeStats) {
+            crawlStats.reposProcessed += nodeStats.reposProcessed || 0;
+            crawlStats.successful += nodeStats.successful || 0;
+            crawlStats.failed += nodeStats.failed || 0;
+            crawlStats.totalBytes += nodeStats.totalBytes || 0;
+            crawlStats.apiCalls += nodeStats.apiCalls || 0;
+            crawlStats.apiErrors += nodeStats.apiErrors || 0;
+            if (Array.isArray(nodeStats.keys)) {
+              allKeys.push(...nodeStats.keys);
+            }
+          }
+
+          pending -= 1;
+          if (pending === 0) {
+            if (allKeys.length === 0) {
+              callback(new Error('No repos stored successfully'));
+              return;
+            }
+            store.put({keys: allKeys}, {key: 'crawl:all-metadata-keys', gid: 'gitgle'}, (putErr) => {
+              if (putErr) {
+                callback(putErr);
+                return;
+              }
+              callback(null, crawlStats);
+            });
+          }
+        },
+      );
     });
   });
 }
