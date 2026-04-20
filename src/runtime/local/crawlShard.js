@@ -1,3 +1,4 @@
+const fs = require('fs');
 const seedLoader = require('../../services/seedLoader.js');
 const storageKeys = require('../../services/storageKeys.js');
 const {fetchRepoData} = require('../../pipelines/repoDataFetcher.js');
@@ -7,6 +8,10 @@ function run(config, callback) {
   const gid = (config && config.gid) || 'gitgle';
   if (!shardFile) {
     callback(new Error('Missing shardFile'));
+    return;
+  }
+  if (!fs.existsSync(shardFile)) {
+    callback(new Error(`Shard file not found on worker: ${shardFile}`));
     return;
   }
 

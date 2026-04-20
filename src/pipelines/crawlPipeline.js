@@ -114,10 +114,13 @@ function runShardedCrawlJob(store, options, crawlStats, callback) {
         node: nodeList[idx % nodeList.length],
       });
     });
+    console.log(`[SHARDED_CRAWL] Found ${shardFiles.length} shards in ${shardDir} (prefix=${shardPrefix || '<none>'})`);
 
     const allKeys = [];
     let pending = assignments.length;
     assignments.forEach((assignment) => {
+      const nodeLabel = `${assignment.node.ip}:${assignment.node.port}`;
+      console.log(`[SHARDED_CRAWL] Dispatch ${assignment.shardFile} -> ${nodeLabel}`);
       const remote = {
         node: assignment.node,
         service: 'crawlShard',
@@ -129,9 +132,14 @@ function runShardedCrawlJob(store, options, crawlStats, callback) {
         remote,
         (nodeErr, nodeStats) => {
           if (nodeErr) {
+            console.error(`[SHARDED_CRAWL] Worker ${nodeLabel} failed ${assignment.shardFile}: ${nodeErr.message}`);
             crawlStats.failed += 1;
             crawlStats.apiErrors += 1;
           } else if (nodeStats) {
+            console.log(
+              `[SHARDED_CRAWL] Worker ${nodeLabel} done ${assignment.shardFile}: ` +
+              `seeds=${nodeStats.seedsLoaded || 0} ok=${nodeStats.successful || 0} fail=${nodeStats.failed || 0}`,
+            );
             crawlStats.reposProcessed += nodeStats.reposProcessed || 0;
             crawlStats.successful += nodeStats.successful || 0;
             crawlStats.failed += nodeStats.failed || 0;
@@ -145,6 +153,7 @@ function runShardedCrawlJob(store, options, crawlStats, callback) {
 
           pending -= 1;
           if (pending === 0) {
+            console.log(`[SHARDED_CRAWL] Aggregate keys collected: ${allKeys.length}`);
             if (allKeys.length === 0) {
               callback(new Error('No repos stored successfully'));
               return;
