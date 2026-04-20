@@ -213,9 +213,14 @@ function simpleFallbackIndex(store, docKeys, jobId, indexStats, callback) {
   const allTerms = {};
   let processed = 0;
   let errors = 0;
+  let successfulReads = 0;
+  console.log(`[INDEX FALLBACK] Starting fallback index for ${docKeys.length} metadata keys`);
 
   const processDoc = (index) => {
     if (index >= docKeys.length) {
+      console.log(
+        `[INDEX FALLBACK] Read summary: total=${docKeys.length} successful=${successfulReads} failed=${errors}`,
+      );
       indexStats.docsIndexed = docKeys.length - errors;
       indexStats.uniqueTerms = Object.keys(allTerms).length;
       indexStats.totalPostings = Object.values(allTerms).reduce(
@@ -258,6 +263,7 @@ function simpleFallbackIndex(store, docKeys, jobId, indexStats, callback) {
         processDoc(index + 1);
         return;
       }
+      successfulReads++;
 
       let textToIndex = (repoData.readme || '') + ' ' + (repoData.description || '');
       if (!textToIndex || textToIndex.trim().length === 0) {
