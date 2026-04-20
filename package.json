@@ -7,8 +7,10 @@
     "src": "src"
   },
   "scripts": {
-    "start": "node --no-deprecation index.js"
-    },
+    "start": "node --no-deprecation index.js",
+    "auto": "node --no-deprecation index.js",
+    "benchmark": "node scripts/run-benchmark.js"
+  },
   "dependencies": {
     "@brown-ds/distribution": "^0.2.32",
     "dotenv": "^17.4.2",

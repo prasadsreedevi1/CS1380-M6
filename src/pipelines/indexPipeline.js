@@ -126,18 +126,7 @@ function runIndex(options, runtime, callback) {
             }, 0)
           : 0;
 
-        const invertedIndex = {};
-        results.forEach((row) => {
-          if (row) {
-            const term = Object.keys(row)[0];
-            const entry = row[term];
-            if (term && entry) {
-              invertedIndex[term] = entry;
-            }
-          }
-        });
-
-        store.put(invertedIndex, {key: 'inv:full-index', gid: 'gitgle'}, (putErr) => {
+        writeInvertedIndexEntries(store, results, (putErr) => {
           if (putErr) {
             return callback(putErr);
           }
@@ -176,6 +165,46 @@ function storeIndexStats(store, jobId, stats, callback) {
   });
 }
 
+/**
+ * Persist inverted-index rows from the same shape as mr.exec `results`
+ * (`[{ term: entry }, ...]`). Writes `inv:full-index` plus per-term `inv:<term>`
+ * keys so search / test-index verification can resolve a term.
+ */
+function writeInvertedIndexEntries(store, results, callback) {
+  const invertedIndex = {};
+  results.forEach((row) => {
+    if (row) {
+      const term = Object.keys(row)[0];
+      const entry = row[term];
+      if (term && entry) {
+        invertedIndex[term] = entry;
+      }
+    }
+  });
+
+  store.put(invertedIndex, {key: 'inv:full-index', gid: 'gitgle'}, (putErr) => {
+    if (putErr) return callback(putErr);
+
+    const terms = Object.keys(invertedIndex);
+    if (terms.length === 0) {
+      return callback(null);
+    }
+
+    let pending = terms.length;
+    let firstErr = null;
+    terms.forEach((term) => {
+      const entry = invertedIndex[term];
+      store.put(entry, {key: storageKeys.invertedIndexKey(term), gid: 'gitgle'}, (err) => {
+        if (err && !firstErr) firstErr = err;
+        pending -= 1;
+        if (pending === 0) {
+          callback(firstErr);
+        }
+      });
+    });
+  });
+}
+
 function simpleFallbackIndex(store, docKeys, jobId, indexStats, callback) {
   
   const allTerms = {};
@@ -190,6 +219,10 @@ function simpleFallbackIndex(store, docKeys, jobId, indexStats, callback) {
         (sum, entry) => sum + Object.keys(entry.postings || {}).length,
         0
       );
+
+      Object.values(allTerms).forEach((entry) => {
+        entry.documentFrequency = Object.keys(entry.postings || {}).length;
+      });
 
       const results = Object.entries(allTerms).map(([term, entry]) => {
         const result = {};
@@ -269,4 +302,5 @@ module.exports = {
   runIndex,
   storeIndexStats,
   simpleFallbackIndex,
+  writeInvertedIndexEntries,
 };

@@ -37,6 +37,7 @@ function runCrawl(options, runtime, callback) {
     let fetched = 0;
     let fetchErrors = 0;
 
+    const staggerMs = Number(process.env.CRAWL_STAGGER_MS ?? 100);
     seeds.forEach((seed, index) => {
       setTimeout(() => {
         fetchRepoData(seed, null, (err, repoData) => {
@@ -66,7 +67,7 @@ function runCrawl(options, runtime, callback) {
             });
           }
         });
-      }, index * 100);
+      }, index * staggerMs);
     });
   });
 }
@@ -126,12 +127,20 @@ function runCrawlJob(store, mr, jobId, options, repos, callback) {
       }, (err, results) => {
         if (err) return callback(err);
 
-        stats.reposProcessed = results ? results.length : 0;
-        stats.successful = results ? results.length : 0;
-        stats.totalBytes = results
-          ? results.reduce((sum, r) => sum + JSON.stringify(r).length, 0)
-          : 0;
+        // Report from successful store.puts. MR `results` can be empty even when all
+        // meta:* writes succeeded (distributed MR reduce/shuffle quirks).
+        const storedCount = keys.length;
+        stats.reposProcessed = storedCount;
+        stats.successful = storedCount;
         stats.failed = storeErrors;
+        stats.totalBytes =
+          results && results.length > 0
+            ? results.reduce((sum, r) => sum + JSON.stringify(r).length, 0)
+            : repos
+              .filter((r) =>
+                keys.includes(storageKeys.documentMetadataKey(r.owner, r.repo)),
+              )
+              .reduce((sum, r) => sum + JSON.stringify(r).length, 0);
 
         const metadataKeysKey = 'crawl:all-metadata-keys';
         store.put({keys}, {key: metadataKeysKey, gid: 'gitgle'}, (err) => {
