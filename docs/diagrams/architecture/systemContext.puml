@@ -45,7 +45,7 @@ STORAGE --> M6: TF statistics\nDF statistics\nMetadata
 
 '' Distributed infrastructure
 M6 --> CLUSTER: Use M1-M5\nservices
-CLUSTER --> M6: Serialization,\nCommunication,\nGossip, MapReduce
+CLUSTER --> M6: Serialization,\nCommunication,\nMapReduce
 
 note right of USERS
   Typical queries:
@@ -88,7 +88,6 @@ end note
 note right of CLUSTER
   M1: Serialization (convert objects)
   M2: Communication (network)
-  M3: Gossip (sync nodes)
   M4: KV Store (persistence)
   M5: MapReduce (parallel jobs)
 end note

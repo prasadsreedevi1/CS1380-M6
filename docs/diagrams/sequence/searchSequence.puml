@@ -84,11 +84,10 @@ loop For each Candidate Document
   MetadataBoost --> SearchService: boost_factor
   deactivate MetadataBoost
   
-  SearchService -> SearchService: combinedScore = tf*idf*boost
+  SearchService -> SearchService: combinedScore = (tf * idf) * boost
   note right of SearchService
-    Final score combines:
-    - TF-IDF (75%)
-    - Metadata (25%)
+    Final score formula:
+    score = (term_frequency × log(N/docFreq)) × metadata_boost
   end note
 end
 
@@ -110,8 +109,10 @@ CLI --> User: displayResults()
 deactivate CLI
 
 note over User, SearchService
-  Total latency for complex query: ~30ms
-  Including 1000+ documents
+  Score calculation:
+  TF-IDF × (language_boost × star_boost)
+  Language boost: 1.3× for programming languages
+  Star boost: 1.2-2.0× based on repo popularity
 end note
 
 @enduml
