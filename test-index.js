@@ -25,7 +25,8 @@ distribution.node.start(() => {
           };
 
           // crawl first so there's data to index
-          runCrawl({ seedFile: './data/seeds/github-repos.txt' }, runtime, (err, crawlStats) => {
+          const seedFile = process.env.SEED_FILE || './data/seeds/github-repos.txt';
+          runCrawl({ seedFile }, runtime, (err, crawlStats) => {
             if (err) {
               console.error('Crawl failed:', err);
               process.exit(1);

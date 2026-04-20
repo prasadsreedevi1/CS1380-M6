@@ -23,7 +23,8 @@ distribution.node.start(() => {
             group: distribution.gitgle,
           };
 
-          runCrawl({ seedFile: './data/seeds/github-repos.txt' }, runtime, (err, stats) => {
+          const seedFile = process.env.SEED_FILE || './data/seeds/github-repos.txt';
+          runCrawl({ seedFile }, runtime, (err, stats) => {
             if (err) {
               console.error('Crawl failed:', err);
               process.exit(1);
