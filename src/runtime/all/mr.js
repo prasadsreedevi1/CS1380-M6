@@ -120,7 +120,7 @@ function mr(config) {
                 const targetNode = Object.values(nodes).find((n) => globalThis.distribution.util.id.getNID(n) === nid);
                 localComm.send(
                   [v, {key: k, gid: shuffleGid}],
-                  {node: targetNode, service: 'store', method: 'append'},
+                  {node: targetNode, service: 'store', method: 'append', gid: 'local'},
                   (e2) => {
                     done++;
                     if (done === total) callback(null, mapResults);
@@ -172,12 +172,18 @@ function mr(config) {
       registerService();
 
       function registerService() {
+        let failed = false;
         let regCount = 0;
         for (const node of nodeList) {
           localComm.send(
             [mrService, mrServiceName],
             {node: node, service: 'routes', method: 'put'},
             (e) => {
+              if (failed) return;
+              if (e) {
+                failed = true;
+                return callback(new Error(`MR registerService failed on ${node.ip}:${node.port}: ${e.message}`), null);
+              }
               regCount++;
               if (regCount === nodeList.length) runMap();
             }
@@ -186,6 +192,7 @@ function mr(config) {
       }
 
       function runMap() {
+        let failed = false;
         let mapCount = 0;
         const keysPayload = allKeys || [];
         for (const node of nodeList) {
@@ -193,6 +200,11 @@ function mr(config) {
             [gid, mrID, keysPayload],
             {node: node, service: mrServiceName, method: 'map'},
             (e) => {
+              if (failed) return;
+              if (e) {
+                failed = true;
+                return callback(new Error(`MR map failed on ${node.ip}:${node.port}: ${e.message}`), null);
+              }
               mapCount++;
               if (mapCount === nodeList.length) runShuffle();
             }
@@ -201,12 +213,18 @@ function mr(config) {
       }
 
       function runShuffle() {
+        let failed = false;
         let shuffleCount = 0;
         for (const node of nodeList) {
           localComm.send(
             [gid, mrID],
             {node: node, service: mrServiceName, method: 'shuffle'},
             (e) => {
+              if (failed) return;
+              if (e) {
+                failed = true;
+                return callback(new Error(`MR shuffle failed on ${node.ip}:${node.port}: ${e.message}`), null);
+              }
               shuffleCount++;
               if (shuffleCount === nodeList.length) runReduce();
             }
@@ -215,6 +233,7 @@ function mr(config) {
       }
 
       function runReduce() {
+        let failed = false;
         let reduceCount = 0;
         const allResults = [];
         for (const node of nodeList) {
@@ -222,6 +241,11 @@ function mr(config) {
             [gid, mrID],
             {node: node, service: mrServiceName, method: 'reduce'},
             (e, results) => {
+              if (failed) return;
+              if (e) {
+                failed = true;
+                return callback(new Error(`MR reduce failed on ${node.ip}:${node.port}: ${e.message}`), null);
+              }
               if (!e && Array.isArray(results)) {
                 allResults.push(...results);
               }
