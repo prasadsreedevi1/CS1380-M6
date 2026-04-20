@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "node index.js",
-    "benchmark": "bash scripts/run-benchmark.sh"
+    "benchmark": "node scripts/run-benchmark.js"
   },
   "dependencies": {
     "@brown-ds/distribution": "^0.2.32",
