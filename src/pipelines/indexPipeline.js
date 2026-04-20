@@ -180,7 +180,19 @@ function writeInvertedIndexEntries(store, results, callback) {
       const term = Object.keys(row)[0];
       const entry = row[term];
       if (term && entry) {
-        invertedIndex[term] = entry;
+        if (!invertedIndex[term]) {
+          invertedIndex[term] = {
+            term,
+            postings: {},
+            documentFrequency: 0,
+          };
+        }
+        const existing = invertedIndex[term];
+        const postings = entry.postings || {};
+        Object.entries(postings).forEach(([docId, freq]) => {
+          existing.postings[docId] = (existing.postings[docId] || 0) + Number(freq || 0);
+        });
+        existing.documentFrequency = Object.keys(existing.postings).length;
       }
     }
   });
