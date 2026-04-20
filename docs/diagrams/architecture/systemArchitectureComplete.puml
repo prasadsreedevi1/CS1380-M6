@@ -1,0 +1,55 @@
+@startuml GITGLE System Architecture - Complete Overview
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title GITGLE: Distributed GitHub Search Engine - Complete System Architecture
+
+Person(user, "User", "Searches repositories")
+
+Container_Boundary(gitgle, "GITGLE Search Engine") {
+  Container(cli, "CLI Interface", "Node.js", "Interactive search & commands")
+  
+  Container_Boundary(pipelines, "Execution Pipelines") {
+    Container(crawlPipeline, "Crawl Pipeline", "JavaScript", "Fetches repos from GitHub API")
+    Container(indexPipeline, "Index Pipeline", "JavaScript", "Builds inverted index via MapReduce")
+    Container(searchPipeline, "Search Pipeline", "JavaScript", "Executes queries & ranks results")
+  }
+  
+  Container_Boundary(searchEngine, "Search Engine Core") {
+    Container(githubApi, "GitHub API Service", "JavaScript", "Real GitHub API calls only")
+    Container(queryProcessor, "Query Processor", "JavaScript", "Parses queries & executes searches")
+    Container(rankingEngine, "Ranking Engine", "JavaScript", "TF-IDF + metadata boost")
+    Container(tokenizer, "Text Processing", "JavaScript", "Tokenization, stemming, parsing")
+  }
+  
+  Container_Boundary(distributed, "Distributed Runtime") {
+    Container(mapReduce, "MapReduce Engine", "JavaScript", "Distributed computation orchestration")
+    Container(store, "Distributed Store", "Node.js + Filesystem", "Key-value store with consistent hashing")
+  }
+}
+
+Container(github, "GitHub API", "REST", "Public repository data")
+
+Rel(user, cli, "Issues queries")
+Rel(cli, crawlPipeline, "Starts crawl")
+Rel(cli, searchPipeline, "Submits search")
+
+Rel(crawlPipeline, githubApi, "Fetches data")
+Rel(crawlPipeline, store, "Stores metadata")
+Rel(crawlPipeline, mapReduce, "Runs MapReduce validation")
+
+Rel(indexPipeline, store, "Reads documents")
+Rel(indexPipeline, mapReduce, "Runs MapReduce indexing")
+Rel(indexPipeline, rankingEngine, "Calculates TF-IDF")
+Rel(indexPipeline, store, "Stores inverted index")
+
+Rel(searchPipeline, store, "Loads index")
+Rel(searchPipeline, queryProcessor, "Parses query")
+Rel(searchPipeline, rankingEngine, "Scores results")
+Rel(cli, searchPipeline, "Displays results")
+
+Rel(githubApi, github, "Calls API")
+Rel(queryProcessor, tokenizer, "Processes terms")
+
+Rel(mapReduce, store, "Coordinates computation")
+
+@enduml

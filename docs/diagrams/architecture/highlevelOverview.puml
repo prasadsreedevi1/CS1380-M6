@@ -1,0 +1,70 @@
+@startuml GITGLE High-Level System Overview
+title GITGLE: High-Level System Architecture Overview
+
+package "User Interface" {
+  [CLI Interface]
+}
+
+package "GITGLE Search Engine" {
+  package "Data Acquisition" {
+    [Crawl Pipeline]
+  }
+  
+  package "Data Processing" {
+    [Index Pipeline]
+  }
+  
+  package "Query Processing" {
+    [Search Pipeline]
+  }
+}
+
+package "Core Components" {
+  package "Services" {
+    [GitHub API Client]
+    [Text Processing]
+    [Ranking Engine]
+  }
+  
+  package "Distributed System" {
+    [MapReduce Engine]
+    [Key-Value Store]
+    [Node Communication]
+  }
+}
+
+package "External Services" {
+  [GitHub API]
+}
+
+[CLI Interface] --> [Crawl Pipeline]
+[CLI Interface] --> [Index Pipeline]
+[CLI Interface] --> [Search Pipeline]
+
+[Crawl Pipeline] --> [GitHub API Client]
+[Crawl Pipeline] --> [Key-Value Store]
+[Crawl Pipeline] --> [MapReduce Engine]
+
+[Index Pipeline] --> [Text Processing]
+[Index Pipeline] --> [Ranking Engine]
+[Index Pipeline] --> [Key-Value Store]
+[Index Pipeline] --> [MapReduce Engine]
+
+[Search Pipeline] --> [Text Processing]
+[Search Pipeline] --> [Ranking Engine]
+[Search Pipeline] --> [Key-Value Store]
+
+[GitHub API Client] --> [GitHub API]
+
+[MapReduce Engine] --> [Key-Value Store]
+[MapReduce Engine] --> [Node Communication]
+
+note bottom
+  **Three Core Pipelines:**
+  
+  1. **Crawl**: Fetch GitHub repos via API
+  2. **Index**: Build searchable inverted index
+  3. **Search**: Execute queries and rank results
+end note
+
+@enduml

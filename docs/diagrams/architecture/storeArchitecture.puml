@@ -1,0 +1,81 @@
+@startuml GITGLE Distributed Store Architecture
+title GITGLE: Distributed Key-Value Store with Consistent Hashing
+
+package "Distributed Storage Architecture" {
+  component "Consistent Hash Ring" as ring {
+    node "Hash Space\n(0 - 2^160)" {
+    }
+  }
+  
+  package "Node 1" {
+    folder "Shard 1" as shard1 {
+      file "repo:google/go" as n1_go
+      file "repo:golanggo-* (partial)" as n1_go_partial
+    }
+  }
+  
+  package "Node 2" {
+    folder "Shard 2" as shard2 {
+      file "repo:mozilla/firefox" as n2_ff
+      file "repo:mozilla* (partial)" as n2_moz_partial
+    }
+  }
+  
+  package "Node 3" {
+    folder "Shard 3" as shard3 {
+      file "inv:full-index" as n3_inv
+      file "crawl:all-metadata-keys" as n3_meta
+      file "stats:index" as n3_stats
+    }
+  }
+}
+
+package "Key Distribution Examples" {
+  together {
+    rectangle "Put/Get Operations" {
+      node "Key: repo:django/django\nHash: 0xA23F...\nNode: 2 (shard2)" as op1
+      node "Key: repo:google/gson\nHash: 0x5C12...\nNode: 1 (shard1)" as op2
+      node "Key: inv:full-index\nHash: 0xDE44...\nNode: 3 (shard3)" as op3
+    }
+  }
+}
+
+package "Data Flow Through Store" {
+  rectangle "Write Path (put)" {
+    node "1. Calculate hash\nof key" as w1
+    node "2. Find node on\nring" as w2
+    node "3. Route HTTP PUT\nto node" as w3
+    node "4. Node writes\nto disk" as w4
+  }
+  
+  rectangle "Read Path (get)" {
+    node "1. Calculate hash\nof key" as r1
+    node "2. Find node on\nring" as r2
+    node "3. Route HTTP GET\nto node" as r3
+    node "4. Node reads\nfrom disk" as r4
+  }
+}
+
+note right of ring
+  Consistent Hashing ensures:
+  - Even data distribution
+  - Minimal rebalancing on node addition
+  - O(log n) lookup time
+  - Support for 1-3 nodes locally
+end note
+
+note bottom of shard1
+  Each node maintains:
+  - Local key-value store
+  - Filesystem persistence
+  - HTTP interface
+end note
+
+note bottom of op3
+  Special keys for system state:
+  - crawl:all-metadata-keys
+  - inv:full-index (4415 terms)
+  - stats:index (indexing stats)
+end note
+
+@enduml

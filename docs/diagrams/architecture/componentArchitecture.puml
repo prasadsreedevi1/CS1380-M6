@@ -62,7 +62,6 @@ package "Search Processing" {
 
 package "Distributed Runtime (M1-M5)" {
   component [MapReduce Engine] as RT_MR
-  component [Gossip Protocol] as RT_GOSSIP
   component [Group Management] as RT_GROUP
   component [Distributed Store] as RT_STORE
 }
@@ -124,7 +123,6 @@ PIPE_SEARCH --> SVC_STORE
 CRL_GITHUB --> EXT_GITHUB
 
 ' Runtime components
-RT_MR -.-> RT_GOSSIP
 RT_MR -.-> RT_GROUP
 RT_MR -.-> RT_STORE
 
