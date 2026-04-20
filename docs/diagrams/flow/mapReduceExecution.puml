@@ -1,155 +1,59 @@
-@startuml GITGLE MapReduce Execution Architecture
-title GITGLE: MapReduce Job Execution - Crawl & Index Phases
+﻿@startuml GITGLE MapReduce Execution
+title GITGLE: MapReduce Execution - Crawl & Index Phases
 
-package "MapReduce Execution Pipeline" {
-  
-  package "Crawl MapReduce Job" {
-    node "Input Data" {
-      file "Repositories" as crawl_input
-    }
-    
-    node "Map Phase" {
-      card "Worker 1" {
-        process "Extract repo metadata" as map1
-      }
-      card "Worker 2" {
-        process "Extract repo metadata" as map2
-      }
-      card "Worker 3" {
-        process "Extract repo metadata" as map3
-      }
-    }
-    
-    node "Output: Key-Value Pairs" {
-      file "(<owner>, repoData)" as map_out1
-      file "(<owner>, repoData)" as map_out2
-      file "(<owner>, repoData)" as map_out3
-    }
-    
-    node "Shuffle & Sort Phase" {
-      process "Group by owner\nSort by repo name" as shuffle
-    }
-    
-    node "Reduce Phase" {
-      card "Reducer 1" {
-        process "Validate repos" as reduce1
-      }
-      card "Reducer 2" {
-        process "Validate repos" as reduce2
-      }
-      card "Reducer 3" {
-        process "Validate repos" as reduce3
-      }
-    }
-    
-    node "Output: Validation Results" {
-      file "Validation Complete\nAll repositories stored" as crawl_out
-    }
+rectangle "CRAWL PHASE" {
+  rectangle "INPUT: Seed Repos" {
+    note
+      github-repos.txt
+    end note
   }
-  
-  package "Index MapReduce Job" {
-    node "Input Data" {
-      file "Repository\nDocuments" as index_input
-    }
-    
-    node "Map Phase" {
-      card "Worker 1" {
-        process "Tokenize &\nCount frequencies" as map_idx1
-      }
-      card "Worker 2" {
-        process "Tokenize &\nCount frequencies" as map_idx2
-      }
-      card "Worker 3" {
-        process "Tokenize &\nCount frequencies" as map_idx3
-      }
-    }
-    
-    node "Output: Term Frequencies" {
-      file "(python, {docId: freq})" as idx_map1
-      file "(java, {docId: freq})" as idx_map2
-      file "(rust, {docId: freq})" as idx_map3
-    }
-    
-    node "Shuffle & Sort Phase" {
-      process "Group identical terms\nAgregate all occurrences" as idx_shuffle
-    }
-    
-    node "Reduce Phase" {
-      card "Reducer 1" {
-        process "Calculate TF-IDF\nfor terms" as reduce_idx1
-      }
-      card "Reducer 2" {
-        process "Calculate TF-IDF\nfor terms" as reduce_idx2
-      }
-      card "Reducer 3" {
-        process "Calculate TF-IDF\nfor terms" as reduce_idx3
-      }
-    }
-    
-    node "Output: Inverted Index" {
-      file "Unique terms\nwith TF-IDF scores" as index_out
-    }
+  rectangle "MAP: Fetch Metadata" {
+    note
+      3 workers
+      Fetch data
+      Download README
+    end note
+  }
+  rectangle "SHUFFLE" {
+    note
+      Group by hash
+      Distribute
+    end note
+  }
+  rectangle "REDUCE: Store" {
+    note
+      3 reducers
+      Store in KV
+    end note
   }
 }
 
-crawl_input --> map1
-crawl_input --> map2
-crawl_input --> map3
-
-map1 --> map_out1
-map2 --> map_out2
-map3 --> map_out3
-
-map_out1 --> shuffle
-map_out2 --> shuffle
-map_out3 --> shuffle
-
-shuffle --> reduce1
-shuffle --> reduce2
-shuffle --> reduce3
-
-reduce1 --> crawl_out
-reduce2 --> crawl_out
-reduce3 --> crawl_out
-
-index_input --> map_idx1
-index_input --> map_idx2
-index_input --> map_idx3
-
-map_idx1 --> idx_map1
-map_idx2 --> idx_map2
-map_idx3 --> idx_map3
-
-idx_map1 --> idx_shuffle
-idx_map2 --> idx_shuffle
-idx_map3 --> idx_shuffle
-
-idx_shuffle --> reduce_idx1
-idx_shuffle --> reduce_idx2
-idx_shuffle --> reduce_idx3
-
-reduce_idx1 --> index_out
-reduce_idx2 --> index_out
-reduce_idx3 --> index_out
-
-note right of map1
-  Map workers process
-  in parallel across
-  distributed nodes
-end note
-
-note right of shuffle
-  Shuffle sorts by key:
-  Groups identical terms
-  Ensures reducers get
-  complete term data
-end note
-
-note right of reduce1
-  Reduce workers:
-  - Aggregate term data
-  - Calculate statistics
-  - Build index entries
-end note
+rectangle "INDEX PHASE" {
+  rectangle "INPUT: Documents" {
+    note
+      Extract README
+    end note
+  }
+  rectangle "MAP: Tokenize" {
+    note
+      3 workers
+      Tokenize text
+      Count frequencies
+    end note
+  }
+  rectangle "SHUFFLE" {
+    note
+      Group by term
+      Hash distribution
+    end note
+  }
+  rectangle "REDUCE: Index" {
+    note
+      3 reducers
+      Build inverted index
+      Calculate DF
+    end note
+  }
+}
 
 @enduml

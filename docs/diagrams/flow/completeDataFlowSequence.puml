@@ -1,134 +1,128 @@
-@startuml GITGLE Complete Data Flow Diagram
-title GITGLE: Complete End-to-End Data Flow
+@startuml GITGLE End-to-End Data Flow
+title GITGLE: Complete Data Flow from Initialization to Search Results
 
-participant User
-participant CLI as "CLI/index.js"
-participant CrawlPipeline as "Crawl Pipeline"
-participant GitHubAPI as "GitHub API\nService"
-participant RepoDataFetcher as "Repo Data\nFetcher"
-participant MapReduceCrawl as "MapReduce\nValidation"
-participant Store as "Distributed\nStore"
-participant IndexPipeline as "Index\nPipeline"
-participant MapReduceIndex as "MapReduce\nIndexing"
-participant RankingEngine as "Ranking\nEngine"
-participant SearchPipeline as "Search\nPipeline"
-participant QueryProcessor as "Query\nProcessor"
-participant RankingSearch as "Ranking\nEngine"
+participant "User" as user
+participant "Crawl Pipeline" as crawlPip
+participant "Recursive Crawl" as recurse
+participant "Repo Fetcher" as fetcher
+participant "GitHub API" as github
+participant "Index Pipeline" as indexPip
+participant "MapReduce" as mr
+participant "Store" as store
+participant "Search Pipeline" as searchPip
+participant "Query Parser" as parser
+participant "Search Service" as search
 
-== INITIALIZATION ==
-User -> CLI: npm start
-activate CLI
-CLI -> CrawlPipeline: Start crawl
+user -> crawlPip: runCrawl(seedFile)
+note right of crawlPip
+  INITIALIZATION:
+  Load seed repositories
+end note
 
-== CRAWL PHASE ==
-activate CrawlPipeline
-CrawlPipeline -> CrawlPipeline: Load seed repos (114)
-CrawlPipeline -> RepoDataFetcher: fetchRepoData(seed)
+crawlPip -> recurse: runRecursiveCrawl()
+note right of recurse
+  CRAWL PHASE
+  Frontier-based sequential crawling
+  Process one repo at a time
+end note
 
-activate RepoDataFetcher
-RepoDataFetcher -> GitHubAPI: getRepositoryDocument()
-activate GitHubAPI
-GitHubAPI -> GitHubAPI: Fetch metadata\n(stars, language, description)
-GitHubAPI -> GitHubAPI: Fetch README.md\nfrom raw.githubusercontent.com
-GitHubAPI -> RepoDataFetcher: Return {metadata, readme}
-deactivate GitHubAPI
+recurse -> fetcher: fetchRepoData(owner, repo)
+fetcher -> github: GET /repos/{owner}/{repo}
+github --> fetcher: metadata, readme, stars
+fetcher --> recurse: repoData
 
-RepoDataFetcher -> Store: Store repo document\n{key: 'repo:owner/name', gid: 'gitgle'}
-activate Store
-Store -> Store: Consistent hash\nShards data
-deactivate Store
-RepoDataFetcher -> CrawlPipeline: callback(null, repoData)
-deactivate RepoDataFetcher
+recurse -> store: PUT metadata
 
-CrawlPipeline -> MapReduceCrawl: runJob(114 repos)
-activate MapReduceCrawl
-MapReduceCrawl -> MapReduceCrawl: Map: Extract repo\nmetadata from each
-MapReduceCrawl -> MapReduceCrawl: Shuffle: Group by\nrepo owner
-MapReduceCrawl -> MapReduceCrawl: Reduce: Validate\nall repos stored
-MapReduceCrawl -> Store: Store metadata\nkeys list\n{key: 'crawl:all-metadata-keys'}
-MapReduceCrawl -> CrawlPipeline: Return 114 successful
-deactivate MapReduceCrawl
+user -> indexPip: runIndex()
+note right of indexPip
+  INDEX PHASE
+  Build inverted index via MapReduce
+end note
 
-CrawlPipeline -> CLI: Crawl complete callback
-deactivate CrawlPipeline
+indexPip -> store: GET all documents
+indexPip -> mr: exec(map, reduce, docs)
 
-== INDEX PHASE ==
-CLI -> IndexPipeline: Start index
+mr -> mr: MAP: tokenize, count TF
+note right of mr
+  Map phase on 3 nodes:
+  - tokenize text
+  - lowercase & normalize
+  - count term frequencies
+  - emit (term, {docId: freq})
+end note
 
-activate IndexPipeline
-IndexPipeline -> Store: Get crawl:all-metadata-keys\n(114 repo keys)
-activate Store
-Store -> IndexPipeline: Return keys list
-deactivate Store
+mr -> mr: SHUFFLE: group by term
+note right of mr
+  Shuffle phase:
+  - collect identical terms
+  - distribute to reducers
+  - via consistent hash
+end note
 
-IndexPipeline -> RankingEngine: Initialize TF-IDF\ncalculator
-activate RankingEngine
-RankingEngine -> RankingEngine: Load totalDocs = 114\nPrepare metadata boost\nfactors
+mr -> mr: REDUCE: aggregate postings
+note right of mr
+  Reduce phase:
+  - collect all occurrences
+  - aggregate postings
+  - calculate document frequency
+  - store inverted index
+end note
 
-IndexPipeline -> MapReduceIndex: runJob(114 documents)
-activate MapReduceIndex
+mr -> store: PUT inv:full-index
+mr -> store: PUT stats:index
 
-MapReduceIndex -> MapReduceIndex: For each document:
-MapReduceIndex -> MapReduceIndex: 1. Fetch from Store\n2. Tokenize README\n3. Stem terms\n4. Count frequencies
+user -> searchPip: executeSearch(query)
+note right of searchPip
+  SEARCH PHASE
+  Execute query and rank results
+end note
 
-MapReduceIndex -> RankingEngine: Calculate TF-IDF\nfor each term
-RankingEngine -> RankingEngine: For each term:\ntf × log(totalDocs/docFreq)\n× metadata_boost
+searchPip -> parser: parse(query string)
+note right of parser
+  Query Parser:
+  - tokenize query
+  - normalize terms
+  - prepare for lookup
+end note
 
-MapReduceIndex -> MapReduceIndex: Build inverted index:\n{term: {postings: [...],\ndocumentFrequency: N,\ntfIdfScores: {docId: score}}}
+searchPip -> search: search(terms)
+search -> store: GET postings(term)
+note right of search
+  For each candidate document:
+  - lookup term postings
+  - get term frequency (TF)
+  - get document frequency (DF)
+  - calculate: TF-IDF = TF * log(N/DF)
+  - apply metadata boost
+  - final score = TF-IDF * boost
+end note
 
-MapReduceIndex -> Store: Store inv:full-index\n(4415 unique terms)\n{key: 'inv:full-index', gid: 'gitgle'}
-activate Store
-Store -> Store: Persist to\ndistributed\nstorage
-deactivate Store
+search -> store: GET metadata(docId)
+note right of search
+  Metadata boost:
+  - language: 1.3x for programming languages
+  - stars: 1.2x to 2.0x based on popularity
+end note
 
-MapReduceIndex -> IndexPipeline: Return index stats
-deactivate MapReduceIndex
+search --> searchPip: results[]
+searchPip --> user: Display top results
 
-IndexPipeline -> CLI: Index complete callback
-deactivate RankingEngine
-deactivate IndexPipeline
+note over crawlPip
+  Crawl: Sequential frontier processing
+  Real GitHub API calls with retry logic
+  ~86 seed repositories, up to max repos
+end note
 
-== SEARCH PHASE ==
-User -> CLI: Enter search query\n"python"
+note over mr
+  Index: Parallel distributed MapReduce
+  3 worker nodes process documents
+  Result: ~4400 unique terms indexed
+end note
 
-activate SearchPipeline
-CLI -> SearchPipeline: executeSearch("python", {...})
-
-SearchPipeline -> Store: Get inv:full-index
-activate Store
-Store -> SearchPipeline: Return full inverted index
-deactivate Store
-
-SearchPipeline -> QueryProcessor: Parse query
-activate QueryProcessor
-QueryProcessor -> QueryProcessor: Tokenize: ["python"]\nStem: ["python"]
-QueryProcessor -> SearchPipeline: Return processed terms
-deactivate QueryProcessor
-
-SearchPipeline -> SearchPipeline: In-memory lookup:\ninv_index["python"]
-
-SearchPipeline -> SearchPipeline: Get postings list:\n[{repoId, freq, tfIdfScore}, ...]
-
-SearchPipeline -> RankingSearch: Calculate final scores\nfor each result
-activate RankingSearch
-RankingSearch -> RankingSearch: Apply metadata boosts:\n- Language boost (1.3×)\n- Stars boost (1.2-2.0×)
-RankingSearch -> RankingSearch: Final score =\ntfIdfScore × boosts
-RankingSearch -> SearchPipeline: Return ranked results
-deactivate RankingSearch
-
-SearchPipeline -> Store: Fetch repo metadata\nfor each result
-activate Store
-Store -> SearchPipeline: Return {owner, repo,\nstars, language, desc}
-deactivate Store
-
-SearchPipeline -> SearchPipeline: Extract snippets\nfrom README
-SearchPipeline -> SearchPipeline: Clean markdown:\nRemove images, links,\ntables, code blocks
-SearchPipeline -> SearchPipeline: Sort by score\nLimit to top 10
-SearchPipeline -> SearchPipeline: Format results
-
-SearchPipeline -> CLI: Return ranked results
-deactivate SearchPipeline
-
-CLI -> User: Display:\n1. django-rest-framework (38.278) ⭐\n2. aiohttp (7.656) ⭐\n...
+note over search
+  Search: KV store lookup + ranking
+  TF-IDF with metadata boosts
+  Return top 10 ranked results
+end note
 
 @enduml

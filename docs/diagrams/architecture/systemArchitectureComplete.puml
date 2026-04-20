@@ -1,55 +1,78 @@
-@startuml GITGLE System Architecture - Complete Overview
+@startuml GITGLE System Architecture - Complete
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
 
 title GITGLE: Distributed GitHub Search Engine - Complete System Architecture
 
-Person(user, "User", "Searches repositories")
+Person(user, "User", "Issues queries & commands")
 
 Container_Boundary(gitgle, "GITGLE Search Engine") {
-  Container(cli, "CLI Interface", "Node.js", "Interactive search & commands")
+  Container(cli, "CLI Interface", "Node.js index.js", "Interactive REPL with commands")
+  Container(seedLoader, "Seed Loader", "seedLoader.js", "Loads seed repositories")
   
   Container_Boundary(pipelines, "Execution Pipelines") {
-    Container(crawlPipeline, "Crawl Pipeline", "JavaScript", "Fetches repos from GitHub API")
-    Container(indexPipeline, "Index Pipeline", "JavaScript", "Builds inverted index via MapReduce")
-    Container(searchPipeline, "Search Pipeline", "JavaScript", "Executes queries & ranks results")
+    Container(crawlPipeline, "Crawl Pipeline", "crawlPipeline.js", "Main crawl orchestrator")
+    Container(indexPipeline, "Index Pipeline", "indexPipeline.js", "Main index orchestrator")
+    Container(searchPipeline, "Search Pipeline", "searchPipeline.js", "Query execution & ranking")
   }
   
-  Container_Boundary(searchEngine, "Search Engine Core") {
-    Container(githubApi, "GitHub API Service", "JavaScript", "Real GitHub API calls only")
-    Container(queryProcessor, "Query Processor", "JavaScript", "Parses queries & executes searches")
-    Container(rankingEngine, "Ranking Engine", "JavaScript", "TF-IDF + metadata boost")
-    Container(tokenizer, "Text Processing", "JavaScript", "Tokenization, stemming, parsing")
+  Container_Boundary(crawlCore, "Crawling Components") {
+    Container(recursiveCrawl, "Recursive Crawl", "recursiveCrawl.js", "Frontier-based crawling with link extraction")
+    Container(repoFetcher, "Repo Data Fetcher", "repoDataFetcher.js", "GitHub API calls with retry")
+    Container(linkExtractor, "Link Extractor", "linkExtractor.js", "Extract URLs from README")
+    Container(githubApi, "GitHub API Service", "githubApi.js", "Authenticated GitHub API client")
   }
   
-  Container_Boundary(distributed, "Distributed Runtime") {
-    Container(mapReduce, "MapReduce Engine", "JavaScript", "Distributed computation orchestration")
-    Container(store, "Distributed Store", "Node.js + Filesystem", "Key-value store with consistent hashing")
+  Container_Boundary(indexCore, "Indexing Components") {
+    Container(textProcessing, "Text Processing", "parsing/*", "Tokenize, normalize, stem, n-grams")
+    Container(tfidf, "TF-IDF Calculator", "ranking/tfidf.js", "Term frequency calculations")
+    Container(metadataBoost, "Metadata Boost", "ranking/metadataBoost.js", "Language & star ranking")
+  }
+  
+  Container_Boundary(queryCore, "Query Components") {
+    Container(queryParser, "Query Parser", "query/queryParser.js", "Parses query strings")
+    Container(queryProc, "Query Processor", "query/queryProcessor.js", "Normalizes & processes terms")
+    Container(searchService, "Search Service", "query/searchService.js", "Executes searches")
+    Container(snippets, "Snippet Generator", "snippets.js", "Extracts excerpts & highlights")
+  }
+  
+  Container_Boundary(distributed, "Distributed Runtime (M1-M5)") {
+    Container(mapReduce, "MapReduce Executor", "all/mr.js", "Distributed MapReduce jobs")
+    Container(store, "Distributed Store", "all/store.js + K-V", "Consistent hash + sharding")
+    Container(distribution, "Distribution.js", "@brown-ds/distribution v0.2.32", "Cluster coordination")
   }
 }
 
-Container(github, "GitHub API", "REST", "Public repository data")
+Container(github, "GitHub API", "REST", "Public repository metadata & README")
 
-Rel(user, cli, "Issues queries")
-Rel(cli, crawlPipeline, "Starts crawl")
-Rel(cli, searchPipeline, "Submits search")
+Rel(user, cli, "submit: query/crawl/index")
+Rel(cli, seedLoader, "load seeds")
+Rel(cli, crawlPipeline, "runCrawl()")
+Rel(cli, indexPipeline, "runIndex()")
+Rel(cli, searchPipeline, "executeSearch()")
 
-Rel(crawlPipeline, githubApi, "Fetches data")
-Rel(crawlPipeline, store, "Stores metadata")
-Rel(crawlPipeline, mapReduce, "Runs MapReduce validation")
+Rel(crawlPipeline, recursiveCrawl, "orchestrate frontier crawl")
+Rel(recursiveCrawl, repoFetcher, "fetch repo data")
+Rel(repoFetcher, githubApi, "API calls")
+Rel(recursiveCrawl, linkExtractor, "extract URLs")
+Rel(recursiveCrawl, store, "store metadata")
+Rel(githubApi, github, "HTTP GET")
 
-Rel(indexPipeline, store, "Reads documents")
-Rel(indexPipeline, mapReduce, "Runs MapReduce indexing")
-Rel(indexPipeline, rankingEngine, "Calculates TF-IDF")
-Rel(indexPipeline, store, "Stores inverted index")
+Rel(indexPipeline, store, "read documents")
+Rel(indexPipeline, mapReduce, "runMapReduce: map/reduce")
+Rel(mapReduce, textProcessing, "tokenize & stem")
+Rel(mapReduce, tfidf, "calculate TF-IDF")
+Rel(mapReduce, store, "store inverted index")
 
-Rel(searchPipeline, store, "Loads index")
-Rel(searchPipeline, queryProcessor, "Parses query")
-Rel(searchPipeline, rankingEngine, "Scores results")
-Rel(cli, searchPipeline, "Displays results")
+Rel(searchPipeline, queryParser, "parse query")
+Rel(queryParser, queryProc, "normalize")
+Rel(queryProc, searchService, "execute")
+Rel(searchService, store, "lookup terms")
+Rel(searchService, tfidf, "calc scores")
+Rel(searchService, metadataBoost, "apply boost")
+Rel(searchService, snippets, "format results")
 
-Rel(githubApi, github, "Calls API")
-Rel(queryProcessor, tokenizer, "Processes terms")
-
-Rel(mapReduce, store, "Coordinates computation")
+Rel(mapReduce, store, "coordinate & shuffle")
+Rel(distribution, store, "manage nodes")
+Rel(distribution, mapReduce, "schedule tasks")
 
 @enduml
