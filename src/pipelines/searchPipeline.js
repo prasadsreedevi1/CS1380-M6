@@ -1,5 +1,6 @@
 const queryParser = require('../search/query/queryParser.js');
 const storageKeys = require('../services/storageKeys.js');
+const snippets = require('../search/snippets.js');
 
 function calculateTFIDF(freq, docFreq, totalDocs) {
   if (docFreq === 0) return 0;
@@ -36,35 +37,6 @@ function getIndexStats(store, callback) {
   });
 }
 
-function getIndexedTerms(store, callback) {
-  const key = storageKeys.indexStatsKey();
-  store.get({key}, (err, stats) => {
-    if (!err && stats && stats.indexedTerms && Array.isArray(stats.indexedTerms)) {
-      return callback(null, stats.indexedTerms);
-    }
-    
-    const terms = [];
-    const prefix = 'idx:';
-    
-    store.get(null, (err, allKeys) => {
-      if (err || !allKeys) {
-        return callback(null, []);
-      }
-      
-      const indexKeys = allKeys.filter(k => typeof k === 'string' && k.startsWith(prefix));
-      
-      indexKeys.forEach(key => {
-        const term = key.substring(prefix.length);
-        if (term.length > 0) {
-          terms.push(term);
-        }
-      });
-      
-      callback(null, terms);
-    });
-  });
-}
-
 function executeSearch(queryString, options, runtime, callback) {
   if (!callback) {
     callback = runtime;
@@ -79,11 +51,12 @@ function executeSearch(queryString, options, runtime, callback) {
 
   getIndexStats(store, (err, indexStats) => {
     if (err || !indexStats || indexStats.docsIndexed === 0) {
-      return callback(null, {
+      callback(null, {
         query: queryString,
         results: [],
         total: 0,
       });
+      return;
     }
 
     const totalDocs = indexStats.docsIndexed;
@@ -91,11 +64,12 @@ function executeSearch(queryString, options, runtime, callback) {
     const indexKey = storageKeys.invertedIndexKey(queryTerm);
     store.get(indexKey, (err, entry) => {
       if (err || !entry || !entry.postings) {
-        return callback(null, {
+        callback(null, {
           query: queryString,
           results: [],
           total: 0,
         });
+        return;
       }
 
       const docIds = Object.keys(entry.postings);
@@ -116,6 +90,12 @@ function executeSearch(queryString, options, runtime, callback) {
             const boost = getMetadataBoost(metadata);
             const finalScore = tfidfScore * boost;
             
+            const content = metadata.content || metadata.readme || '';
+            const snippet = snippets.extractSnippet(queryTerm, content, 100);
+            const termMetadata = snippets.extractTermMetadata(queryTerm, content);
+            
+            const excerpt = snippets.generateExcerpt(content, 150, [queryTerm]);
+            
             const resultObj = {
               owner: metadata.owner || owner,
               repo: metadata.repo || repo,
@@ -128,7 +108,24 @@ function executeSearch(queryString, options, runtime, callback) {
               matchedTerms: [queryTerm],
               termFrequency: termFreq,
               matchCount: 1,
-              content: metadata.content || metadata.readme || '' // For snippet extraction
+              
+              snippet: snippet.highlighted,
+              snippetContext: snippet.snippet,
+              
+              termMetadata: {
+                frequency: termMetadata.frequency,
+                density: termMetadata.density,
+                firstOccurrence: termMetadata.firstOccurrence,
+                position: snippet.position,
+              },
+              
+              docMetadata: {
+                wordCount: excerpt.wordCount,
+                charCount: excerpt.charCount,
+                language: metadata.language,
+              },
+              
+              content: content 
             };
             
             results.push(resultObj);
@@ -160,21 +157,10 @@ function executeSearch(queryString, options, runtime, callback) {
       });
 
       if (docIds.length === 0) {
-        getIndexedTerms(store, (err, indexedTerms) => {
-          if (err || !indexedTerms || indexedTerms.length === 0) {
-            return callback(null, {
-              query: queryString,
-              results: [],
-              total: 0,
-            });
-          }
-          
-          
-          callback(null, {
-            query: queryString,
-            results: [],
-            total: 0,
-          });
+        callback(null, {
+          query: queryString,
+          results: [],
+          total: 0,
         });
         return;
       }
@@ -185,7 +171,6 @@ function executeSearch(queryString, options, runtime, callback) {
 module.exports = {
   executeSearch,
   getIndexStats,
-  getIndexedTerms,
   calculateTFIDF,
   getMetadataBoost,
 };

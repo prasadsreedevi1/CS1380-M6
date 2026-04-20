@@ -20,14 +20,14 @@ const colors = {
 
 const HELP_MESSAGE = `
 available commands:
-  add <owner>/<repo>    - add a repository
-  search <query>        - search repositories
-  help                  - show this message
-  exit                  - quit
+  add <owner>/<repo>     - add a repository
+  search <query>         - search repositories
+  status                 - show system status
+  help                   - show this message
+  exit                   - quit
 
 examples:
-  tensorflow/tensorflow
-  python framework
+  search python framework
   add google/go
   exit
 `;
@@ -78,28 +78,37 @@ distribution.node.start((err) => {
 
     showLoadingScreen();
     
-    startInteractiveSearch(runtime);
-    
     if (runtime.store && runtime.executor) {
       const crawlOptions = {seedFile: 'data/seeds/github-repos.txt'};
       
+      console.log(`${colors.cyan}Starting crawl...${colors.reset}`);
+      
       runCrawl(crawlOptions, runtime, (err, crawlStats) => {
         if (err) {
-          console.error(`${colors.yellow}[Background] Crawl error: ${err.message}${colors.reset}`);
+          // Crawl failed silently, continue with available data
+          startInteractiveSearch(runtime);
           return;
         }
-        console.log(`${colors.green}[Background] Crawl complete${colors.reset}`);
+
+        console.log(`${colors.green}✓ Crawl complete${colors.reset}`);
+        console.log(`${colors.cyan}Starting index...${colors.reset}`);
 
         runIndex({}, runtime, (err, indexStats) => {
           if (err) {
-            console.error(`${colors.yellow}[Background] Index error: ${err.message}${colors.reset}`);
-            return;
+          } else {
+            console.log(`${colors.green}✓ Index complete${colors.reset}`);
           }
-          console.log(`${colors.green}[Background] Indexing complete${colors.reset}`);
+          
+          console.log(`\n${colors.green}══════════════════════════════════${colors.reset}`);
+          console.log(`${colors.green}✓ Ready for search!${colors.reset}`);
+          console.log(`${colors.green}══════════════════════════════════${colors.reset}\n`);
+          
+          startInteractiveSearch(runtime);
         });
       });
     } else {
-      console.log(`${colors.yellow}[Note] Background crawl/index skipped (no runtime support)${colors.reset}\n`);
+      console.log(`${colors.cyan}Starting search (local mode)...${colors.reset}\n`);
+      startInteractiveSearch(runtime);
     }
   }
 
@@ -130,52 +139,15 @@ distribution.node.start((err) => {
           return;
         }
 
-        // ADD COMMAND
-        if (trimmedLower.startsWith('add ')) {
-          const repoPath = trimmed.substring(4).trim();
-          const parts = repoPath.split('/');
-          
-          if (parts.length !== 2 || !parts[0] || !parts[1]) {
-            console.log(`${colors.cyan}Invalid format. Use: add owner/repo${colors.reset}\n`);
-            prompt();
-            return;
+        // STATUS COMMAND - Show system status
+        if (trimmedLower === 'status') {
+          console.log(`${colors.green}=== System Status ===${colors.reset}`);
+          console.log(`Node ID: ${colors.blue}${distribution.nodeID || 'unknown'}${colors.reset}`);
+          if (distribution.all && distribution.all.store) {
+            console.log(`Store: ${colors.green}active${colors.reset}`);
           }
-
-          const [owner, repo] = parts;
-
-          const githubApi = require('./src/services/githubApi.js');
-          
-          githubApi.getRepositoryDocument(owner, repo, null, (err, repoData) => {
-            if (err) {
-              console.log(`${colors.cyan}Failed to fetch: ${err.message}${colors.reset}\n`);
-              prompt();
-              return;
-            }
-
-            const storageKeys = require('./src/services/storageKeys.js');
-            const metaKey = storageKeys.documentMetadataKey(owner, repo);
-            const data = {
-              owner,
-              repo,
-              url: `https://github.com/${owner}/${repo}`,
-              description: repoData.description || '',
-              language: repoData.language || 'Unknown',
-              stars: repoData.stars || 0,
-              topics: repoData.topics || [],
-              readme: repoData.readme || '',
-            };
-
-            runtime.store.put(data, {key: metaKey, gid: 'gitgle'}, (err2) => {
-              if (err2) {
-                console.log(`${colors.cyan}Failed to store: ${err2.message}${colors.reset}\n`);
-              } else {
-                console.log(`${colors.green}Added ${owner}/${repo} to index!${colors.reset}`);
-                console.log(`   ${colors.blue}${data.description}${colors.reset}`);
-                console.log(`   Stars: ${data.stars} ⭐ | Language: ${data.language}\n`);
-              }
-              prompt();
-            });
-          });
+          console.log('');
+          prompt();
           return;
         }
 
@@ -194,12 +166,34 @@ distribution.node.start((err) => {
           } else if (results.total === 0) {
             console.log(`${colors.cyan}No results found for "${query}"${colors.reset}`);
           } else {
-            console.log(`${colors.green}Found ${results.total} repositories:${colors.reset}`);
+            console.log(`${colors.green}Found ${results.total} repositories:${colors.reset}\n`);
             results.results.forEach((r, i) => {
-              console.log(`  ${i + 1}. ${colors.blue}${r.owner}/${r.repo}${colors.reset} (${r.stars} ⭐, score: ${r.score.toFixed(2)})`);
+              // Repository header
+              console.log(`  ${i + 1}. ${colors.blue}${r.owner}/${r.repo}${colors.reset}`);
+
+              // Metadata: stars, language, score
+              const metadata = `${r.stars} ⭐ | ${r.language} | Score: ${r.score.toFixed(3)}`;
+              console.log(`     ${colors.cyan}${metadata}${colors.reset}`);
+
+              // Description
               if (r.description) {
-                console.log(`     ${r.description.substring(0, 60)}...`);
+                console.log(`     ${r.description.substring(0, 70)}...`);
               }
+
+              if (r.snippet) {
+                const snippetText = r.snippet
+                  .replace(/\*\*/g, '') // Remove markdown bold markers for display
+                  .substring(0, 100);
+                console.log(`     ${colors.yellow}Excerpt:${colors.reset} ${snippetText}...`);
+              }
+
+              if (r.termMetadata) {
+                const meta = r.termMetadata;
+                const termStats = `freq: ${meta.frequency} | density: ${meta.density}%`;
+                console.log(`     ${colors.magenta}${termStats}${colors.reset}`);
+              }
+
+              console.log('');
             });
           }
           console.log('');

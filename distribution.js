@@ -55,7 +55,6 @@ function bootstrap(config) {
   distribution.local.status.stop = distributionLib.local.status.stop;
   distribution.local.comm = distributionLib.local.comm;
   distribution.all.groups = distributionLib.all.groups;
-  distribution.all.gossip = distributionLib.all.gossip;
   distribution.node.start = distributionLib.node.start;
 
   for (const [key, service] of Object.entries(distribution.local)) {
