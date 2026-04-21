@@ -1,0 +1,14 @@
+{
+  "coordinator": {
+    "host": "127.0.0.1",
+    "port": 3000
+  },
+  "workers": [
+    {
+      "host": "127.0.0.1",
+      "port": 3001
+    }
+  ],
+  "seedFile": "data/seeds/generated-10k.txt",
+  "skipWorkerSpawn": true
+}
